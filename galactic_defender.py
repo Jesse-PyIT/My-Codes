@@ -15,36 +15,26 @@ from pygame.locals import *
 pygame.init()
 
 window_info = pygame.display.Info()
-screen_width = window_info.current_w
-screen_height = window_info.current_h
+screen_width = 1460 #window_info.current_w
+screen_height = 720 #window_info.current_h
+screen_middle = pygame.math.Vector2(screen_width / 2, screen_height / 2)
 screen = pygame.display.set_mode((screen_width, screen_height))
 
 
-def show_variable(var, font, loc=(300,600)):
-    
+def show_variable(var, font, loc=(300,600)):    
     surf = font.render(f'{var}', True, 'yellow')
     rect = surf.get_rect(center=loc)
     screen.blit(surf, rect)
-    
+
+        
 def load_and_scale(image_path, scale_y=False):
     global screen_width
     global screen_height
-    #default_screen_width = 1460
-    #default_screen_height = 720
     default_aspect_ratio = 1460 / 720
     current_aspect_ratio = screen_width / screen_height
     aspect_ratio_difference = current_aspect_ratio / default_aspect_ratio
     img = pygame.image.load(image_path).convert_alpha()
-    #width_ratio = img.get_width() / default_screen_width
-    #height_ratio = img.get_height() / default_screen_height
-    #height_to_width_ratio = img.get_height() / img.get_width()
-    #fixed_width = screen_width * width_ratio
-    #fixed_height = screen_height * height_ratio
-    #if scale_y is True:
-    #img = pygame.transform.scale(img, (fixed_width, (height_to_width_ratio * fixed_width)))
     img = pygame.transform.scale_by(img, aspect_ratio_difference)
-    #elif scale_y is False:
-        #img = pygame.transform.scale(img, (fixed_width, fixed_height))
     return img
 
 
@@ -66,11 +56,9 @@ def load_animation(image_folder, scale=None):
     
 def load_enemy_ships(folder, boss=False):
     
-    _ships = listdir(folder)
-    ships = sorted(_ships)
-    fixed_ships = []
+    ships = listdir(folder)
+    fixed_ships = dict()
     for img in ships:
-        print(folder + img)
         original_img = pygame.image.load(folder + img).convert_alpha()
         width = original_img.get_width()
         height = original_img.get_height()
@@ -85,23 +73,29 @@ def load_enemy_ships(folder, boss=False):
             elif height > width:
                 resize_factor = screen_height * 0.1 / height
         new_img = pygame.transform.scale(original_img, (width * resize_factor, height * resize_factor))
-        fixed_ships.append(new_img)
-    return np.array(fixed_ships)
+        fixed_ships[img] = new_img
+
+    return fixed_ships
  
        
 def load_saved_games(games):
     
     saved_games_list = [k for k in games.keys()]
-    games_selection = dict()
+    games_selection = list()
     x = screen_width * 0.25
     y = screen_height * 0.33
     for b in saved_games_list:
         if len(games_selection) % 9 == 0:
             x = (screen_width * len(games_selection) // 9) + screen_width * 0.25
             y = screen_height * 0.33
-        game_link = Button(upgrades_stat_bar, (x, y), b, upgrades_font)
-        games_selection[str(len(games_selection) + 1)] = game_link 
-            
+        game_link_index = saved_games_list.index(b)
+        with open(b + '.txt', 'r') as f:
+            lines = f.readlines()
+            stats = json.loads(lines[3])
+            rank = stats['Rank']
+        game_link = Button(upgrades_stat_bar, (x, y), rank, ui_font, connected_game=saved_games_list[game_link_index])
+        #games_selection[b] = game_link 
+        games_selection.append(game_link)
         if len(games_selection) % 3 == 0 and game_link.rect.centery > screen_height / 2:
             x += game_link.rect.width + 10
             y = screen_height * 0.33
@@ -138,7 +132,11 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(obj, np.integer):
             return int(obj)
         return super(NumpyEncoder, self).default(obj)
-    
+
+class ClassEncoder(json.JSONEncoder):
+    def default(self, obj):
+        return obj.__dict__
+            
 
 FPS = 60
 CLOCK = pygame.time.Clock()
@@ -146,17 +144,27 @@ CLOCK = pygame.time.Clock()
 pygame.display.set_caption('Galactic Defender')
 
 # Modified font sizes for dynamic screen sizing
+size_15_font = screen_width * (15 / 1460)
+size_18_font = screen_width * (18 / 1460)
+size_20_font = screen_width * (20 / 1460)
 size_25_font = screen_width * (25 / 1460)
+size_30_font = screen_width * (30 / 1460)
 size_35_font = screen_width * (35 / 1460)
+size_45_font = screen_width * (45 / 1460)
 size_50_font = screen_width * (50 / 1460)
 size_60_font = screen_width * (60 / 1460)
 
 # Fonts
-reg_font = pygame.font.SysFont('arial', int(size_25_font))
+ui_15_font = pygame.font.SysFont('Fonts/Pavelt.ttf', int(size_15_font))
+ui_18_font = pygame.font.SysFont('Fonts/Pavelt.ttf', int(size_18_font))
+debug_font = pygame.font.SysFont('arial', int(size_25_font))
+ui_20_font = pygame.font.Font('Fonts/Pavelt.ttf', int(size_20_font))
 ui_font = pygame.font.Font('Fonts/Pavelt.ttf', int(size_25_font))
-big_font = pygame.font.Font('Fonts/Pavelt.ttf', int(size_60_font))
+ui_30_font = pygame.font.Font('Fonts/Pavelt.ttf', int(size_30_font))
 upgrades_font = pygame.font.Font('Fonts/Pavelt.ttf', int(size_35_font))
+ui_45_font = pygame.font.Font('Fonts/Pavelt.ttf', int(size_45_font))
 title_font = pygame.font.Font('Fonts/Pavelt.ttf', int(size_50_font))
+big_font = pygame.font.Font('Fonts/Pavelt.ttf', int(size_60_font))
 
 # Background Images
 bg = pygame.image.load('stars_bg.png').convert_alpha()
@@ -206,131 +214,89 @@ for i in spawn_animation:
 charge_up_animation = load_animation('Animations/Charge Up/')
 
 # Game Title
-#game_title_label_image = pygame.image.load('Menu/game_title.png').convert_alpha()
 game_title_label_image = load_and_scale('Menu/game_title.png')
 
-# Level Button Images
-level_buttons = load_animation('Level Buttons/', scale=0.1)
-
-#locked_level_button_image = pygame.image.load('locked_level.png').convert_alpha()
-locked_level_button_image = load_and_scale('locked_level.png')
-
 # Levels Menu Title
-#levels_menu_title = pygame.image.load('UI Text/level_overworld_title.png').convert_alpha()
 levels_menu_title = load_and_scale('UI Text/level_overworld_title.png')
 
 # UI Text
-#music_text = pygame.image.load('UI Text/music.png').convert_alpha()
 music_text = load_and_scale('UI Text/music.png')
-#sounds_text = pygame.image.load('UI Text/sounds.png').convert_alpha()
 sounds_text = load_and_scale('UI Text/sounds.png')
-#toggle_on_text = pygame.image.load('UI Text/on.png').convert_alpha()
 toggle_on_text = load_and_scale('UI Text/on.png')
-#toggle_off_text = pygame.image.load('UI Text/off.png').convert_alpha()
 toggle_off_text = load_and_scale('UI Text/off.png')
 
 # Currency UI Labels
-#space_crystals_label_image = pygame.image.load('UI Text/space_crystals.png').convert_alpha()
 space_crystals_label_image = load_and_scale('UI Text/space_crystals.png')
-#power_gems_label_image = pygame.image.load('UI Text/power_gems.png').convert_alpha()
 power_gems_label_image = load_and_scale('UI Text/power_gems.png')
 
 # UI Buttons
-#goto_levels_button_image = pygame.image.load('UI Buttons/goto_levels.png').convert_alpha()
 goto_levels_button_image = load_and_scale('UI Buttons/goto_levels.png')
-#goto_menu_button_image = pygame.image.load('UI Buttons/goto_menu.png').convert_alpha()
 goto_menu_button_image = load_and_scale('UI Buttons/goto_menu.png')
-#goto_upgrades_button_image = pygame.image.load('UI Buttons/goto_upgrades.png').convert_alpha()
 goto_upgrades_button_image = load_and_scale('UI Buttons/goto_upgrades.png')
 go_back_button_image = pygame.image.load('UI Buttons/go_back.png').convert_alpha()
+go_back_to_upgrades_button_image = pygame.transform.scale_by(goto_upgrades_button_image, 0.6)
 go_back_button_image = pygame.transform.scale(go_back_button_image, (screen_width * 0.16, screen_height * 0.1))
-#resume_game_button_image = pygame.image.load('UI Buttons/resume_game.png').convert_alpha()
 resume_game_button_image = load_and_scale('UI Buttons/resume_game.png')
+play_button_image = load_and_scale('UI Buttons/play_game.png')
+delete_button_image = load_and_scale('UI Buttons/delete_game.png')
+locked_level_button_image = load_and_scale('locked_level.png')
 
 # Main Menu Buttons 
-#new_game_button_image = pygame.image.load('UI Buttons/new_game.png').convert_alpha()
 new_game_button_image = load_and_scale('UI Buttons/new_game.png')
-#load_game_button_image = pygame.image.load('UI Buttons/load_game.png').convert_alpha()
 load_game_button_image = load_and_scale('UI Buttons/load_game.png')
-#exit_game_button_image = pygame.image.load('UI Buttons/exit_game.png').convert_alpha()
 exit_game_button_image = load_and_scale('UI Buttons/exit_game.png')
 
 # Settings Menu Title
 settings_menu_title_image = load_and_scale('UI Text/settings_menu_title.png')
 
 # Settings Buttons
-#music_toggle_button_image = pygame.image.load('music_toggle_button.png').convert_alpha()
 music_toggle_button_image = load_and_scale('music_toggle_button.png')
-#sounds_toggle_button_image = pygame.image.load('sounds_toggle_button.png').convert_alpha() 
 sounds_toggle_button_image = load_and_scale('sounds_toggle_button.png')
 
 # Upgrades Buttons
-#base_upgrades_button_image = pygame.image.load('UI Buttons/base_upgrades.png').convert_alpha()
 base_upgrades_button_image = load_and_scale('UI Buttons/base_upgrades.png')
-#base_health_upgrades_button_image = pygame.image.load('UI Buttons/health_upgrades.png').convert_alpha()
 base_health_upgrades_button_image = load_and_scale('UI Buttons/health_upgrades.png')
-#shield_upgrades_button_image = pygame.image.load('UI Buttons/shield_upgrades.png').convert_alpha()
 shield_upgrades_button_image = load_and_scale('UI Buttons/shield_upgrades.png')
-#turrets_upgrades_button_image = pygame.image.load('UI Buttons/turret_upgrades.png').convert_alpha()
 turrets_upgrades_button_image = load_and_scale('UI Buttons/turret_upgrades.png')
-#main_turret_upgrades_button_image = pygame.image.load('UI Buttons/main_turret_upgrades.png').convert_alpha()
 main_turret_upgrades_button_image = load_and_scale('UI Buttons/main_turret_upgrades.png')
-#extra_turrets_upgrades_button_image = pygame.image.load('UI Buttons/helpers_upgrades.png').convert_alpha()
 extra_turrets_upgrades_button_image = load_and_scale('UI Buttons/helpers_upgrades.png')
-#extra_upgrades_button_image = pygame.image.load('UI Buttons/special_upgrades.png').convert_alpha()
 extra_upgrades_button_image = load_and_scale('UI Buttons/special_upgrades.png')
-#special_attacks_upgrades_button_image = pygame.image.load('UI Buttons/special_attacks_upgrades.png').convert_alpha()
 special_attacks_upgrades_button_image = load_and_scale('UI Buttons/special_attacks_upgrades.png')
-#special_defenses_upgrades_button_image = pygame.image.load('UI Buttons/special_defenses_upgrades.png').convert_alpha()
 special_defenses_upgrades_button_image = load_and_scale('UI Buttons/special_defenses_upgrades.png')
 
 # Special Attacks Buttons
-#rapid_fire_button_image = pygame.image.load('UI Buttons/rapid_fire.png').convert_alpha()
 rapid_fire_button_image = load_and_scale('UI Buttons/rapid_fire.png')
-#cluster_shot_button_image = pygame.image.load('UI Buttons/cluster_shot.png').convert_alpha()
 cluster_shot_button_image = load_and_scale('UI Buttons/cluster_shot.png')
-#raining_comets_button_image = pygame.image.load('UI Buttons/raining_comets.png').convert_alpha()
 raining_comets_button_image = load_and_scale('UI Buttons/raining_comets.png')
-#vaporize_button_image = pygame.image.load('UI Buttons/vaporize.png').convert_alpha()
 vaporize_button_image = load_and_scale('UI Buttons/vaporize.png')
-#meteor_shower_button_image = pygame.image.load('UI Buttons/meteor_shower.png').convert_alpha()
 meteor_shower_button_image = load_and_scale('UI Buttons/meteor_shower.png')
 
 # Special Defenses Buttons
-#shock_absorber_button_image = pygame.image.load('UI Buttons/shock_absorber.png').convert_alpha()
 shock_absorber_button_image = load_and_scale('UI Buttons/shock_absorber.png')
-#poison_antidote_button_image = pygame.image.load('UI Buttons/poison_antidote.png').convert_alpha()
 poison_antidote_button_image = load_and_scale('UI Buttons/poison_antidote.png')
+flares_defense_button_image = load_and_scale('UI Buttons/flares_defense.png')
+laser_deflection_button_image = load_and_scale('UI Buttons/laser_deflection.png')
+magnetic_mine_button_image = load_and_scale('UI Buttons/magnetic_mine.png')
 
 # Special Attack and Defenses container
-#specials_container = pygame.image.load('specials_container.png').convert_alpha()
 specials_container = load_and_scale('specials_container.png')
 
 # Special Attacks and Defenses Label abbreviations
-#special_attacks_label_abbreviated = pygame.image.load('UI Text/special_attacks_abbreviated_label.png').convert_alpha()
 special_attacks_label_abbreviated = load_and_scale('UI Text/special_attacks_abbreviated_label.png')
-#special_defenses_label_abbreviated = pygame.image.load('UI Text/special_defenses_abbreviated_label.png').convert_alpha()
 special_defenses_label_abbreviated = load_and_scale('UI Text/special_defenses_abbreviated_label.png')
 
-settings_button_image = pygame.image.load('settings_button.png').convert_alpha()
-#continue_button_image = pygame.image.load('continue_button.png').convert_alpha()
+settings_button_image = load_and_scale('settings_button.png')
 continue_button_image = load_and_scale('continue_button.png')
-#previous_button_image = pygame.image.load('previous.png').convert_alpha()
 previous_button_image = load_and_scale('previous.png')
 
 level_nav_button = pygame.image.load('continue_level_button.png').convert_alpha()
 #level_nav_button = load_and_scale('continue_level_button.png')
 
-#level_options_button_image = pygame.image.load('menu_button.png').convert_alpha()
 level_options_button_image = load_and_scale('menu_button.png')
-#pause_level_button_image = pygame.image.load('pause_level_button.png').convert_alpha()
 pause_level_button_image = load_and_scale('pause_level_button.png')
-game_speed_button_image = pygame.image.load('adjust_game_speed.png').convert_alpha()
-game_speed_button_image = pygame.transform.scale_by(game_speed_button_image, 1)
-repair_health = pygame.image.load('health_icon.png').convert_alpha()
+game_speed_button_image = load_and_scale('adjust_game_speed.png')
 
 # Close button
-#close_button_image = pygame.image.load('close_button.png').convert_alpha()
 close_button_image = load_and_scale('close_button.png')
 
 # Player Space Base
@@ -340,58 +306,40 @@ electrocuted_base = pygame.image.load('Player/electrocuted_base.png').convert_al
 electrocuted_base = pygame.transform.scale(electrocuted_base, (screen_width * 0.4, screen_width * 0.4))
 poisoned_base = pygame.image.load('Player/poisoned_base.png').convert_alpha()
 poisoned_base = pygame.transform.scale(poisoned_base, (screen_width * 0.4, screen_width * 0.4))
-#shield_main = pygame.image.load('Player/base_shield.png').convert_alpha()
+rubberized_base = pygame.image.load('Player/deflection_base.png').convert_alpha()
+rubberized_base = pygame.transform.scale(rubberized_base, (screen_width * 0.4, screen_width * 0.4))
 shield_main = load_and_scale('Player/base_shield.png')
-#turret_main = pygame.image.load('Player/base_turret_main.png').convert_alpha()
 turret_main = load_and_scale('Player/base_turret_main.png')
-#turret_extra = pygame.image.load('Player/helper_turret.png').convert_alpha()
 turret_extra = load_and_scale('Player/helper_turret.png')
-#electrocuted_turret = pygame.image.load('Player/electrocuted_turret.png').convert_alpha()
 electrocuted_turret = load_and_scale('Player/electrocuted_turret.png')
-#vaporizing_arc_image = pygame.image.load('vaporizing_arc.png').convert_alpha()
+frozen_turret_image = load_and_scale('Player/frozen_turret.png')
 vaporizing_arc_image = load_and_scale('vaporizing_arc.png')
-#base_health_container = pygame.image.load('base_health_container.png').convert_alpha()
 base_health_container = load_and_scale('base_health_container.png')
 
 # Bullets
-#player_laser = pygame.image.load('player_bullet.png').convert_alpha()
 player_laser = load_and_scale('player_bullet.png')
-#enemy_laser = pygame.image.load('enemy_bullet.png').convert_alpha()
 enemy_laser = load_and_scale('enemy_bullet.png')
-#enemy_turret_laser = pygame.image.load('enemy_turret_laser.png').convert_alpha()
 enemy_turret_laser = load_and_scale('enemy_turret_laser.png')
-#poison_laser = pygame.image.load('poison_laser.png').convert_alpha()
 poison_laser = load_and_scale('poison_laser.png')
-#destroy_shield_laser = pygame.image.load('destroyer.png').convert_alpha()
+normal_poison_laser = load_and_scale('poison_laser_normal.png')
 destroy_shield_laser = load_and_scale('destroyer.png')
-#wave_blast_image = pygame.image.load('wave_blast.png').convert_alpha()
 wave_blast_image = load_and_scale('wave_blast.png')
-#solid_laser_image = pygame.image.load('solid_laser.png').convert_alpha()
 solid_laser_image = load_and_scale('solid_laser.png')
-#laser_flare = pygame.image.load('enemy_flare.png').convert_alpha()
 laser_flare =load_and_scale('enemy_flare.png')
-#cluster_laser_image = pygame.image.load('cluster_laser.png').convert_alpha()
 cluster_laser_image = load_and_scale('cluster_laser.png')
-#laser_cluster_image = pygame.image.load('laser_cluster.png').convert_alpha()
 laser_cluster_image = load_and_scale('laser_cluster.png')
-#critical_laser_image = pygame.image.load('critical_laser.png').convert_alpha()
 critical_laser_image = load_and_scale('critical_laser.png')
 
 # Electric bolts
-#charge_bolt_image = pygame.image.load('charge_bolts.png').convert_alpha()
 charge_bolt_image = load_and_scale('charge_bolts.png')
 
-#black_hole_image = pygame.image.load('black_hole.png').convert_alpha()
-black_hole_image = load_and_scale('black_hole.png')
-#raining_comet_image = pygame.image.load('raining_comet.png').convert_alpha()
 raining_comet_image = load_and_scale('raining_comet.png')
+magnetic_mine_image = load_and_scale('magnetic_mine.png')
 
 # Missiles
-#side_missile_image = pygame.image.load('side_missile.png').convert_alpha()
 side_missile_image = load_and_scale('side_missile.png')
 
 # Bombs
-#enemy_rubble_bomb = pygame.image.load('rubble_bomb.png').convert_alpha()
 enemy_rubble_bomb = load_and_scale('rubble_bomb.png')
 
 # Enemy Ships
@@ -404,41 +352,35 @@ healer_ring_no_effect_image = pygame.transform.scale(healer_ring_no_effect_image
 healer_ring_with_effect_image = pygame.image.load('healer_ring_with_effect.png').convert_alpha()
 healer_ring_with_effect_image = pygame.transform.scale(healer_ring_with_effect_image, (200, 200))
 
-#health_recovery_icon_image = pygame.image.load('health_recovery_icon.png').convert_alpha()
 health_recovery_icon_image = load_and_scale('health_recovery_icon.png')
 
 # Spawning Orbs
-#turret_spawn_orb = pygame.image.load('boss2_turret_spawn_shot.png').convert_alpha()
 turret_spawn_orb = load_and_scale('boss2_turret_spawn_shot.png')
 
 # Meteors
-#tan_meteor = pygame.image.load('meteor.png').convert_alpha()
 tan_meteor = load_and_scale('meteor.png')
 
-#test_boss = pygame.image.load('blueship2.png').convert_alpha()
-
-#level_overworld_button = pygame.image.load('level_button.png').convert_alpha()
 level_overworld_button = load_and_scale('level_button.png')
-
 level_button = pygame.transform.scale_by(level_overworld_button, 2)
-#power_crystal = pygame.image.load('power_crystal.png')
+
+# Player currency and loot images
 power_crystal = load_and_scale('power_crystal.png')
-#power_gem_image = pygame.image.load('power_gem.png').convert_alpha()
 power_gem_image = load_and_scale('power_gem.png')
+
+# Player Power Stone images
+red_power_stone_image = load_and_scale('Power Stones/red.png')
+orange_power_stone_image = load_and_scale('Power Stones/orange.png')
+yellow_power_stone_image = load_and_scale('Power Stones/yellow.png')
+green_power_stone_image = load_and_scale('Power Stones/green.png')
+blue_power_stone_image = load_and_scale('Power Stones/blue.png')
 
 #level_over_menu = pygame.image.load('level_over_window.png').convert_alpha()
 level_over_menu = load_and_scale('level_over_window.png')
 
-#upgrade_table = pygame.image.load('upgrade_window.png').convert_alpha()
 upgrade_table = load_and_scale('upgrade_window.png')
-#upgrades_stat_bar = pygame.image.load('Table.png').convert_alpha()
 upgrades_stat_bar = load_and_scale('Table.png')
 turret_empty_location = pygame.image.load('turret_location_indicator.png').convert_alpha()
 turret_empty_location = pygame.transform.scale(turret_empty_location, (screen_width * 0.044, screen_height * 0.0986))
-
-# Test surfaces for improved performance
-#new_game_button = pygame.image.load('new_game_button.jpg').convert_alpha()
-
 
 class Title:
     
@@ -449,6 +391,9 @@ class Title:
         
     def show(self):
         screen.blit(self.image, self.rect)
+
+    def show_to_player(self):
+        screen.blit(self.image, self.rect)        
 
 
 class Feedback:
@@ -582,7 +527,7 @@ class UpgradeMenu:
     def __init__(self, header, dict, upgrade_increase_amounts, loc):
         self.image = upgrade_table
         self.loc = pygame.math.Vector2(loc)
-        self.rect = self.image.get_rect(topleft=self.loc)
+        self.rect = self.image.get_rect(center=self.loc)
         self.title = header
         self.header = Feedback(self.title, upgrades_font, (self.rect.centerx, self.rect.top + 40))
         self.dict = dict
@@ -634,8 +579,8 @@ class UpgradeMenu:
     def update_cost(self, upgrade):
         i = np.where(self.buttons == upgrade)[0][0]
         self.dict[self.dict_keys[i]] *= self.increase_amounts[i]
-        if self.dict[self.dict_keys[i]] >= 999999999:
-            self.dict[self.dict_keys[i]] = 999999999
+        if self.dict[self.dict_keys[i]] >= 999999:
+            self.dict[self.dict_keys[i]] = 999999
         self.buttons[i].label.update_var(f'{int(self.dict[self.dict_keys[i]])}')
         
     def get_cost(self, upgrade):
@@ -725,7 +670,7 @@ class StatsTable(UpgradeMenu):
 
 class Button:
 
-    def __init__(self, image, loc, label, label_font):
+    def __init__(self, image, loc, label, label_font, connected_game=None):
         self.color = 'yellow'
         self.image = image
         self.loc = pygame.math.Vector2(loc)
@@ -735,6 +680,7 @@ class Button:
             self.label = Feedback(f'{label}', label_font, self.rect.center)
         else:
             self.label = label
+        self.connected_game = connected_game
         self.button_mask = pygame.mask.from_surface(self.image)
         self.button_mask_surf = self.button_mask.to_surface(setcolor='cyan', unsetcolor=(0, 0, 0, 0)).convert_alpha()
         self.show_submenu = False
@@ -743,7 +689,8 @@ class Button:
         self.flash_counter = 0
         self.flashes = 1
         self.scroll_amount = 0
-        
+        self.remaining_uses = Feedback('0', ui_20_font, (self.rect.left + (self.rect.width * 0.74), self.rect.top + (self.rect.height * 0.2)))
+                
     def show(self):
         screen.blit(self.image, self.rect)
         if self.scroll_amount != 0:
@@ -761,6 +708,9 @@ class Button:
             self.flash_counter = 0
         if self.label != None:
             self.label.show_to_player()
+                        
+    def show_to_player(self):
+        self.show()
             
     def scroll(self):
         self.rect.centerx += self.scroll_amount
@@ -775,6 +725,9 @@ class Button:
     def is_offsety(self):
         if self.loc.y != self.origin_pos.y:
             return True
+        
+    def show_selected_dot(self):
+        pygame.draw.circle(screen, 'green', (self.rect.left + (self.rect.width * 0.2), self.rect.top + (self.rect.height * 0.2)), 5)
         
     def clicked(self, event):
         if self.rect.collidepoint(pygame.mouse.get_pos()):
@@ -819,8 +772,7 @@ class NavButton(Button):
     
     def __init__(self, image, loc, label=None, font=None):
         super().__init__(image, loc, label, font)
-        
-
+               
 
 class Shader:
     
@@ -859,8 +811,10 @@ class MiniMenu:
         self.winning_loot_label = None
         self.bonus_loot = None
         self.bonus_loot_label = None
-        self.pc_loot = None
+        self.power_gems_loot = None
         self.power_gems_loot_label = None
+        self.lives_left_label = None
+        self.lives_left_num = None
         
     def show(self):
         screen.blit(self.image, self.rect)
@@ -869,18 +823,34 @@ class MiniMenu:
             self.winning_loot_label.show_to_player()
             self.winning_loot.show_to_player()
             self.power_gems_loot_label.show_to_player()        
-            self.pc_loot.show_to_player()
+            self.power_gems_loot.show_to_player()
             screen.blit(power_crystal, (self.winning_loot.rect.x - 40, self.winning_loot.rect.y))
-            screen.blit(power_gem_image, (self.pc_loot.rect.x - 40, self.pc_loot.rect.y))
+            screen.blit(power_gem_image, (self.power_gems_loot.rect.x - 40, self.power_gems_loot.rect.y))
         if self.bonus_loot != None:
             self.bonus_loot.show_to_player()
         
+    def show_lost_info(self):
+        if self.lives_left_label != None:
+            self.lives_left_label.show_to_player()
+            self.lives_left_num.show_to_player()
+            self.lives_left_label.rect.center = (self.rect.centerx, self.rect.top + (self.rect.height * 0.3))
+            self.lives_left_num.rect.center = (self.lives_left_label.rect.right + size_30_font, self.lives_left_label.rect.centery)
+            
     def generate_winnings(self, loot, power_gems, bonus_loot=None):
         accuracy = game['Current Level'].get_accuracy()
         self.winning_loot_label = Feedback('Rewards', upgrades_font, (self.rect.centerx, self.rect.top + self.rect.height * 0.25))
-        self.winning_loot = Feedback(f'{int(loot)}', upgrades_font, (self.rect.centerx, self.winning_loot_label.rect.centery + self.winning_loot_label.rect.height + 10))
+        self.winning_loot = Feedback(f'{int(loot)}', ui_30_font, (self.rect.centerx, self.winning_loot_label.rect.centery + self.winning_loot_label.rect.height + 10))
         self.power_gems_loot_label = Feedback(f'{accuracy}% Acc. Bonus', upgrades_font, (self.rect.centerx, self.winning_loot.rect.bottom + self.winning_loot.rect.height))
-        self.pc_loot = Feedback(f'{int(power_gems)}', upgrades_font, (self.winning_loot.rect.centerx, self.power_gems_loot_label.rect.centery + self.power_gems_loot_label.rect.height + 10))
+        self.power_gems_loot = Feedback(f'{int(power_gems)}', ui_30_font, (self.winning_loot.rect.centerx, self.power_gems_loot_label.rect.centery + self.power_gems_loot_label.rect.height + 10))
+        if bonus_loot != None:
+            self.bonus_loot = bonus_loot 
+            self.bonus_loot.rect.center = self.rect.centerx, self.rect.top + (self.rect.height * 0.7)
+        else:
+            self.bonus_loot = None
+    
+    def generate_lost_info(self, lives_left, available_power_stones=None):
+        self.lives_left_label = Feedback('Lives Left:', ui_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.3)))
+        self.lives_left_num = Feedback(f'{lives_left}', ui_font, (self.lives_left_label.rect.right + size_30_font, self.lives_left_label.rect.centery))
         
     def slide_to_middle(self, speed):
         self.loc.move_towards_ip((screen_width / 2, screen_height / 2), speed)
@@ -889,9 +859,12 @@ class MiniMenu:
         if self.winning_loot != None:
             self.winning_loot_label.rect.center = (self.rect.centerx, self.rect.top + self.rect.height * 0.25)
             self.winning_loot.rect.center = (self.rect.centerx, self.winning_loot_label.rect.centery + self.winning_loot_label.rect.height + 10)
-        if self.pc_loot != None:
+        if self.power_gems_loot != None:
             self.power_gems_loot_label.rect.center = (self.rect.centerx, self.winning_loot.rect.bottom + self.winning_loot.rect.height)
-            self.pc_loot.rect.center = (self.winning_loot.rect.centerx, self.power_gems_loot_label.rect.centery + self.power_gems_loot_label.rect.height + 10)
+            self.power_gems_loot.rect.center = (self.winning_loot.rect.centerx, self.power_gems_loot_label.rect.centery + self.power_gems_loot_label.rect.height + 10)
+        if self.bonus_loot != None:
+            self.bonus_loot.rect.center = self.rect.centerx, self.rect.top + (self.rect.height * 0.7)
+            
         
     def slide_to_origin(self, speed):
         self.loc.move_towards_ip(self.origin_pos, speed)
@@ -900,11 +873,123 @@ class MiniMenu:
         if self.winning_loot != None:
             self.winning_loot_label.rect.center = (self.rect.centerx, self.rect.top + self.rect.height * 0.25)
             self.winning_loot.rect.center = (self.rect.centerx, self.winning_loot_label.rect.centery + self.winning_loot_label.rect.height + 10)
-        if self.pc_loot != None:
+        if self.power_gems_loot != None:
             self.power_gems_loot_label.rect.center = (self.rect.centerx, self.winning_loot.rect.bottom + self.winning_loot.rect.height)
-            self.pc_loot.rect.center = (self.winning_loot.rect.centerx, self.power_gems_loot_label.rect.centery + self.power_gems_loot_label.rect.height + 10)
+            self.power_gems_loot.rect.center = (self.winning_loot.rect.centerx, self.power_gems_loot_label.rect.centery + self.power_gems_loot_label.rect.height + 10)
+        if self.bonus_loot != None:
+            self.bonus_loot.rect.center = self.rect.centerx, self.rect.top + (self.rect.height * 0.7)
 
+
+class PreviewWindow:
+    
+    def __init__(self, image, pos):
+        self.image = image
+        self.pos = pygame.math.Vector2(pos)
+        self.rect = self.image.get_rect(center=self.pos)
+        self.preview_info = dict()
+        self.collected_power_stones = []
+        self.previewing_saved_game = False
         
+    def get_saved_game_info(self, game, connected_game, stats):
+        # will get the player's currency and add them to the dictionary        
+        # getting the last saved date and time
+        self.preview_info['Header'] = Feedback(f'{stats["Rank"]}', ui_20_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.055)))
+        self.preview_info['Last Saved Label'] = Feedback('Last Saved', ui_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.15)))
+        self.preview_info['Last Saved Time'] = Feedback(f'{saved_games[connected_game]}', ui_font, (self.rect.centerx, self.preview_info['Last Saved Label'].rect.centery + (size_25_font * 1.5)))
+        self.preview_info['Player Rank Label'] = Feedback('Rank', ui_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.28)))
+        self.preview_info['Player Rank'] = Feedback(f'{stats["Rank"]}', ui_font, (self.rect.centerx, self.preview_info['Player Rank Label'].rect.centery + (size_25_font * 1.5)))
+        self.preview_info['Player Space Crystals'] = Feedback(f'{stats["Space Crystals"]}', ui_30_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.52)))
+        self.preview_info['Space Crystal Icon'] = Title(power_crystal, (self.preview_info['Player Space Crystals'].rect.left - power_crystal.get_width(), self.preview_info['Player Space Crystals'].rect.centery))
+        self.preview_info['Player Power Gems'] = Feedback(f'{stats["Power Gems"]}', ui_30_font, (self.rect.centerx, self.preview_info['Player Space Crystals'].rect.centery + (size_25_font * 2)))
+        self.preview_info['Power Gem Icon'] = Title(power_gem_image, (self.preview_info['Player Power Gems'].rect.left - power_gem_image.get_width(), self.preview_info['Player Power Gems'].rect.centery))
+        self.preview_info['Lives Left Label'] = Feedback(f'Lives: {stats["Lives"]}', ui_font, (self.rect.centerx, self.preview_info['Player Power Gems'].rect.centery + (size_25_font * 2)))
+        
+    def get_power_stone_collection(self, stones):
+        self.collected_power_stones.clear()
+        x = (self.rect.left + self.rect.width * 0.16)
+        y = (self.rect.top + (self.rect.height * 0.425))
+        spacing = self.rect.width * 0.16
+        for stone in stones:
+            if stones[stone] > 0:
+                if stone == 'Strength':
+                    stone_image = red_power_stone_image
+                    
+                elif stone == 'Recovery':
+                    stone_image = orange_power_stone_image
+                    
+                elif stone == 'Speed':
+                    stone_image = yellow_power_stone_image
+                    
+                elif stone == 'Depletion':
+                    stone_image = green_power_stone_image
+                    
+                elif stone == 'Freeze':
+                    stone_image = blue_power_stone_image
+                    
+                if len(self.collected_power_stones) > 0:
+                    s = Title(stone_image, (x + (spacing * len(self.collected_power_stones)), y))
+                else:
+                    s = Title(stone_image, (x, y))
+                self.collected_power_stones.append(s)
+        
+    def get_power_stone_loot(self, level, stones):
+        if level.num == 20:
+            if stones['Strength'] == 0:
+                self.preview_info['Loot Stone Chance'] = Feedback('75% Chance', ui_30_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.4)))
+                self.preview_info['Loot Stone'] = PowerStone('Strength', red_power_stone_image, (self.preview_info['Loot Stone Chance'].rect.left - (red_power_stone_image.get_width() / 2), self.preview_info['Loot Stone Chance'].rect.centery), 1, 75)
+                
+        elif level.num == 30:
+            if stones['Recovery'] == 0:
+                self.preview_info['Loot Stone Chance'] = Feedback('50% Chance', ui_30_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.4)))
+                self.preview_info['Loot Stone'] = PowerStone('Recovery', orange_power_stone_image, (self.preview_info['Loot Stone Chance'].rect.left - (orange_power_stone_image.get_width() / 2), self.preview_info['Loot Stone Chance'].rect.centery), 2, 50)
+                
+        elif level.num == 40:
+            if stones['Speed'] == 0:
+                self.preview_info['Loot Stone Chance'] = Feedback('25% Chance', ui_30_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.4)))
+                self.preview_info['Loot Stone'] = PowerStone('Speed', yellow_power_stone_image, (self.preview_info['Loot Stone Chance'].rect.left - (yellow_power_stone_image.get_width() / 2), self.preview_info['Loot Stone Chance'].rect.centery), 5, 25)
+                
+        elif level.num == 60:
+            if stones['Depletion'] == 0:
+                self.preview_info['Loot Stone Chance'] = Feedback('10% Chance', ui_30_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.4)))
+                self.preview_info['Loot Stone'] = PowerStone('Depletion', green_power_stone_image, (self.preview_info['Loot Stone Chance'].rect.left - (green_power_stone_image.get_width() / 2), self.preview_info['Loot Stone Chance'].rect.centery), 10, 10)
+                
+        elif level.num == 70:
+            if stones['Freeze'] == 0:
+                self.preview_info['Loot Stone Chance'] = Feedback('5% Chance', ui_30_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.4)))
+                self.preview_info['Loot Stone'] = PowerStone('Freeze', blue_power_stone_image, (self.preview_info['Loot Stone Chance'].rect.left - (blue_power_stone_image.get_width() / 2), self.preview_info['Loot Stone Chance'].rect.centery), 15, 5)
+
+        else:
+            try:
+                self.preview_info.pop('Loot Stone Chance')
+                self.preview_info.pop('Loot Stone')
+            except KeyError:
+                pass
+
+    def get_level_preview_info(self, stats, level):
+        # will get the player's currency and and them to the dictionary        
+        # getting the last saved date and time
+        self.preview_info['Header'] = Feedback(f'Level {level.num}', upgrades_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.1)))
+        self.preview_info['Number of Enemies'] = Feedback(f'Number of Enemies: {len(level.active_enemies)}', ui_30_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.28)))
+        self.preview_info['Loot Rewarded Label'] = Feedback('Rewards', ui_30_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.5)))
+        self.preview_info['Space Crystals Awarded'] = Feedback(f'{level.loot_drop()}', ui_30_font, (self.rect.centerx, self.preview_info['Loot Rewarded Label'].rect.bottom + (size_20_font * 1.5)))
+        self.preview_info['Space Crystal Icon'] = Title(power_crystal, (self.preview_info['Space Crystals Awarded'].rect.left - power_crystal.get_width(), self.preview_info['Space Crystals Awarded'].rect.centery))
+        self.preview_info['Power Gems Awarded'] = Feedback(f'{level.power_gem_loot()} - {level.power_gem_loot() + 100}', ui_30_font, (self.rect.centerx, self.preview_info['Space Crystals Awarded'].rect.centery + (size_25_font * 2)))       
+        self.preview_info['Power Gem Icon'] = Title(power_gem_image, (self.preview_info['Power Gems Awarded'].rect.left - power_gem_image.get_width(), self.preview_info['Power Gems Awarded'].rect.centery))
+
+    def set_confirm_delete_game_info(self):
+        self.preview_info['Header'] = Feedback('Delete Game?', upgrades_font, (self.rect.centerx, self.rect.top + (self.rect.height * 0.1)))
+        self.preview_info['Confirm Yes'] = Button(upgrades_stat_bar, (self.rect.centerx, self.rect.top + (self.rect.height * 0.6)), 'Yes', upgrades_font)
+        self.preview_info['Confirm No'] = Button(upgrades_stat_bar, (self.rect.centerx, self.preview_info['Confirm Yes'].rect.centery + (self.preview_info['Confirm Yes'].rect.height * 1.2)), 'No', upgrades_font)
+
+    def show_preview_info(self):
+        screen.blit(self.image, self.rect)
+        for info in self.preview_info:
+            self.preview_info[info].show_to_player()
+        if self.previewing_saved_game is True:
+            for s in self.collected_power_stones:
+                s.show_to_player()
+        
+                        
 class Level:
  
     def __init__(self, image, num, num_of_types, enemy_types, button_pos, num_of_enemies, boss=None):
@@ -914,7 +999,7 @@ class Level:
         self.num = num
         self.enemy_types = enemy_types
         self.num_of_types = num_of_types 
-        self.entry_button = NavButton(self.image, button_pos)
+        self.entry_button = Button(self.image, button_pos, num, ui_45_font)
         self.locked_button = NavButton(locked_level_button_image, button_pos)
         self.spawn_delay = 4
         self.start_time = time()
@@ -925,6 +1010,8 @@ class Level:
         self.completed = False
         self.current_spawn_index = 0
         self.active_enemies = None
+        self.enemies_left_label = Feedback('Enemies Left:', ui_20_font, (screen_width / 2, size_15_font))
+        self.enemies_left_num = Feedback('0', ui_20_font, (self.enemies_left_label.rect.right + size_20_font, self.enemies_left_label.rect.centery))
         self.scroll_amount = 0
         self.score_gain = 1.2345 * self.num
         self.player_base_starting_health = 0
@@ -946,14 +1033,15 @@ class Level:
         self.scroll()
         
     def is_boss_level(self):
-        if self.active_enemies[-1].image in enemy_boss_images:
+        if self.active_enemies[-1].is_boss is True:
             return True
         
     def get_boss(self):
         try:
-            image = enemy_boss_images[self.boss]
+            boss_name = list(k for k in enemy_boss_images.keys())[self.boss]
+            image = enemy_boss_images[boss_name]
             return image
-        except IndexError:
+        except KeyError:
             return None
             
     def get_boss_stats(self):
@@ -985,20 +1073,22 @@ class Level:
             self.entry_button.rect.centerx -= self.scroll_amount
             self.locked_button.rect.centerx -= self.scroll_amount
             self.entry_button.rect.centerx = self.entry_button.rect.centerx
+            self.entry_button.label.rect.center = self.entry_button.rect.center
             self.locked_button.rect.centerx = self.locked_button.rect.centerx
             self.scroll_amount = 0
         elif self.scroll_amount < 0:
             self.entry_button.rect.x -= self.scroll_amount
             self.locked_button.rect.x -= self.scroll_amount            
             self.entry_button.rect.centerx = self.entry_button.rect.centerx
+            self.entry_button.label.rect.center = self.entry_button.rect.center
             self.locked_button.rect.centerx = self.locked_button.rect.centerx
             self.scroll_amount = 0
          
     def loot_drop(self):
-        return int(len(self.active_enemies) * 9.2 * self.num)
-        
-    def bonus_loot(self):
-        return int(self.loot_drop() * 0.2)
+        return int(self.num_of_enemies * 12.4 * self.num)       
+     
+    def enemies_left(self):
+        return int(len(self.active_enemies) - self.current_spawn_index)
     
     def get_accuracy(self):
         try:
@@ -1022,6 +1112,20 @@ class Level:
                 return int(diff)
             else:
                 return int(diff + (100 * self.num // 5))
+                
+    def power_stone_loot(self, collected_stones, stone):
+        loot_chances = []
+        if collected_stones[stone.power] == 0:
+            for i in range(stone.loot_chance):
+                loot_chances.append(True)
+            for j in range(100 - stone.loot_chance):
+                loot_chances.append(False)
+            random.shuffle(loot_chances)
+            loot = random.choice(loot_chances)
+            if loot is True:
+                return stone
+            else:
+                return None 
                
     def spawn_enemy(self):
         if self.current_spawn_index < len(self.active_enemies):
@@ -1039,16 +1143,57 @@ class Level:
         # Num of each type of enemy is equally split with total num of enemies
         for types in range(self.num_of_types):
             for each in range(self.num_of_enemies // self.num_of_types):
-                rindex = self.enemy_types[names[types]]
+                #rindex = self.enemy_types[names[types]]
                 ry = random.randint(player_base.rect.top + 40, player_base.rect.bottom - 40)
-                enemy = Enemy(enemy_ships[types], (screen_width + 100, ry), enemy_types[enemy_names[types]])
+                enemy = Enemy(enemy_ships[f'{names[types]}.png'], (screen_width + 100, ry), enemy_types[names[types]])
                 queued_enemies.append(enemy)
+        # Adding in the leftover amount of enemies
+        # after getting an even amount of each type in num_of_types
+        for each_leftover in range(self.num_of_enemies % self.num_of_types):
+            random_filler = random.choice(queued_enemies)
+            filler_enemy = Enemy(random_filler.image, random_filler.pos, random_filler.stats)
+            queued_enemies.append(filler_enemy)
         random.shuffle(queued_enemies)
         if self.boss != None:
             keys = [k for k in enemy_boss_types.keys()]
-            queued_enemies.append(Enemy(enemy_boss_images[self.boss], (screen_width + enemy_boss_images[self.boss].get_width() + 100, screen_height / 2), enemy_boss_types[keys[self.boss]]))
+            boss_image = enemy_boss_images[f'{keys[self.boss]}.png']
+            e = Enemy(boss_image, (screen_width + boss_image.get_width() + 100, screen_height / 2), enemy_boss_types[keys[self.boss]])
+            e.is_boss = True
+            queued_enemies.append(e)
             self.boss_name = Feedback('Boss', upgrades_font, (screen_width / 2, 50))
         return queued_enemies
+        
+    def explode_reveal_power_stone(self, stone):
+        x = -5
+        y = -1
+        # 10 power stones explode in an upward arch
+        for i in range(10):
+            s = PowerStone(stone.power, stone.image, stone.pos, stone.lives_granted, stone.loot_chance)
+            project_pos = pygame.math.Vector2(stone.pos.x + x, stone.pos.y + y)
+            s.projectile_velocity = s.set_projectile_velocity(project_pos)
+            s.explode = True
+            if i > 4:
+                y += 1
+            else:
+                y -= 1
+            x += 1 if x != 0 else 2
+            power_stones_group.add(s)
+            
+        # 10 power stones explode in a downward arch
+        x = -5
+        y = -1
+        for i in range(10):
+            s = PowerStone(stone.power, stone.image, stone.pos, stone.lives_granted, stone.loot_chance)
+            project_pos = pygame.math.Vector2((stone.pos.x + x, stone.pos.y + y))
+            s.projectile_velocity = s.set_projectile_velocity(project_pos)
+            s.explode = True
+            if i > 4:
+                y -= 1
+            else:
+                y += 1
+            x += 1 if x != 0 else 2
+            power_stones_group.add(s)
+        
         
     def configure_probabilities(self, num):
         start_weight = self.num_of_types
@@ -1066,18 +1211,38 @@ class Level:
                 chances[j] += 2
         return chances
         
+    def set_spawn_delay(self):
+        if len(helper_turret_group) == 1:
+            self.spawn_delay = 3.5
+        elif len(helper_turret_group) == 2:
+            self.spawn_delay = 3
+        elif len(helper_turret_group) == 3:
+            self.spawn_delay = 2.5
+        elif len(helper_turret_group) == 4:
+            self.spawn_delay = 2
+        else:
+            self.spawn_delay = 4
+    
     def load(self, base):
         self.completed = False
         self.played_winning_sound = False
         self.played_defeated_sound = False
         self.notified_player_about_boss = False
-        self.spawn_delay = 4
+        self.set_spawn_delay()
         #level['Paused'] = False
         self.active_enemies = self.generate_enemies()
         self.current_spawn_index = 0
         self.player_base_starting_health = base.stats['Health']
-        if base_shield in base_group:
-            self.base_shield_starting_health = base_shield.health
+        self.enemies_left_num.update_var(f'{len(self.active_enemies) - self.current_spawn_index}')
+        if base_shield.stats['Status'] == 'Active':
+            if base_shield.health > 0:
+                self.base_shield_starting_health = base_shield.health
+                base_shield.health = base_shield.stats['Max Health']
+            elif base_shield.health <= 0:
+                base_shield.health = base_shield.stats['Max Health']
+                self.base_shield_starting_health = base_shield.health
+                base_group.add(base_shield)
+        player_base.poisoned_amount = 0
         self.player_base_damage_taken = 0
         self.total_shots_hit = 0
         self.total_shots_taken = 0
@@ -1091,14 +1256,14 @@ class Base(pygame.sprite.Sprite):
     def __init__(self, image, pos, stats):
         super().__init__()
         self.image = image
+        self.pos = pygame.math.Vector2(pos)
         self.icon_image = pygame.transform.scale_by(image, 0.5)
         self.mask = pygame.mask.from_surface(self.image)
         self.mask_outline = self.mask.outline()
         self.electrocuted_image = electrocuted_base
         self.poisoned_mask_surf = self.mask.to_surface(setcolor='green', unsetcolor=(0,0,0,0))
         self.poisoned_mask_surf = pygame.transform.scale_by(self.poisoned_mask_surf, 1.01)
-        self.rect = self.image.get_rect()
-        self.rect.center = pos
+        self.rect = self.image.get_rect(center=self.pos)
         self.stats = stats
         self.lives = 5
         self.last_regen_time = time()
@@ -1106,15 +1271,18 @@ class Base(pygame.sprite.Sprite):
         self.poisoned_amount = 0
         self.poison_antidote_applied = False
         self.special_attack_used = False
-        self.special_attack_in_use = None
+        self.special_attack_in_use = 'None'
         self.special_attack_start_time = time()
         self.special_defense_start_time = time()
         self.special_defense_used = False
+        self.special_defense_in_use = 'None'
         self.special_defense_duration = 30
         self.rapid_fire_delay = 1
+        self.last_meteor_spawn_time = time()
         self.raining_comets_start_time = time()
         self.raining_comets_duration = 10
         self.last_comet_time = time()
+        self.last_flare_deployed_time = time()
         self.comet_delay = 0.5
         self.collided_enemy_bullets = {}
         self.electrified = False
@@ -1127,18 +1295,26 @@ class Base(pygame.sprite.Sprite):
         self.absorb_electric_shock = False
         self.absorb_electric_shock_time = time()
         self.health_bar_label = Feedback('Base', ui_font, (0, 0))
-        
+        self.selected_for_upgrade = False
+        self.selected_mask = pygame.mask.from_surface(self.image)
+        self.selected_mask_surf = self.selected_mask.to_surface(setcolor='yellow', unsetcolor=(0, 0, 0, 0)).convert_alpha()
+            
     def update(self, container):
         if self.poison_antidote_applied is True:
             self.image = base_main
             self.poisoned_amount = 0
-        if self.poisoned is True:
+        if self.poisoned_amount > 0:
             self.poisoned_damage()
             self.image = poisoned_base
+        if self.special_defense_in_use == 'Deflection':
+            self.image = rubberized_base
+        else:
+            self.image = base_main 
         if self.stats['Health'] < self.stats['Max Health']:
             if level['Game Over'] is False:
                 if self.stats['Health Regeneration'] == 'Active':
-                    self.regenerate()
+                    if self.electrified is False and self.poisoned_amount <= 0:
+                        self.regenerate()
         container.show()
         self.health_bar_label.rect.center = (container.rect.centerx, container.rect.top + 20)
         self.health_bar_label.show_to_player()
@@ -1150,6 +1326,27 @@ class Base(pygame.sprite.Sprite):
             screen.blit(self.electrocuted_image, self.rect)                                                                                                                          
             self.electrify_units()           
                 
+    def show(self):
+        if self.selected_for_upgrade is True:
+            self.show_selected_highlight()
+        screen.blit(self.image, self.rect)
+    
+    def clicked(self, event):
+        if self.rect.collidepoint(pygame.mouse.get_pos()):
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                return True
+    
+    def show_selected_highlight(self):
+        offset = 1
+        screen.blit(self.selected_mask_surf, (self.rect.x+offset, self.rect.y))
+        screen.blit(self.selected_mask_surf, (self.rect.x-offset, self.rect.y))
+        screen.blit(self.selected_mask_surf, (self.rect.x, self.rect.y+offset))
+        screen.blit(self.selected_mask_surf, (self.rect.x, self.rect.y+offset))
+        screen.blit(self.selected_mask_surf, (self.rect.x+offset, self.rect.y-offset))
+        screen.blit(self.selected_mask_surf, (self.rect.x+offset, self.rect.y+offset))
+        screen.blit(self.selected_mask_surf, (self.rect.x-offset, self.rect.y-offset))
+        screen.blit(self.selected_mask_surf, (self.rect.x-offset, self.rect.y+offset))
+    
     def show_health(self, container):
         difference_ratio = self.stats['Health'] / self.stats['Max Health']
         max_health_bar = pygame.Rect(container.rect.left + 25, container.rect.centery - 25, container.rect.width - 50, 15)
@@ -1169,9 +1366,7 @@ class Base(pygame.sprite.Sprite):
             
     def shock_absorber(self):
         screen.blit(vaporizing_arc_image, (self.rect.centerx, self.rect.top))
-        #for point in self.mask_outline:
-            #pygame.draw.circle(self.image, 'yellow', point, 5)
-            
+                 
     def electrify_units(self):
         if time() - self.electrified_start_time < self.electrified_duration:
             self.image = self.electrocuted_image       
@@ -1187,12 +1382,12 @@ class Base(pygame.sprite.Sprite):
             
     def poisoned_damage(self):
         if self.poisoned_amount > 0:
-            if self.stats['Health'] - 3 <= 0:
+            if self.stats['Health'] - 1 <= 0:
                 self.stats['Health'] = 0
                 self.poisoned_amount = 0              
             else:
-                self.stats['Health'] -= 3
-                self.poisoned_amount -= 3
+                self.stats['Health'] -= 1
+                self.poisoned_amount -= 1
         else:
             self.poisoned = False
             self.image = base_main
@@ -1208,18 +1403,16 @@ class Base(pygame.sprite.Sprite):
                 
     def vaporize_enemies(self, group):
         for e in group:
-            if e.image in enemy_ships:
+            if type(e) == Enemy and e.is_boss is False:
                 if e.rect.right < screen_width:
                     e.kill()
                     animations_group.add(Animation(impact_animation, 1, e.pos))
                     
-    def meteor_shower(self, group):
-        y = -100
-        for i in range(50):
+    def meteor_shower(self):
+        if time() - self.last_meteor_spawn_time >= 0.1:
             x = random.randint(self.rect.right + 10, screen_width - 10)
-            m = Meteor(tan_meteor, (x, y), 100, 200)
-            group.add(m)
-            y -= 50
+            player_bullet_group.add(Meteor(tan_meteor, (x, -100)))
+            self.last_meteor_spawn_time = time()
             
     def cluster_shot(self, group):
         b = Bullet(cluster_laser_image, self.rect.center, base_turret.stats['Damage'], Turret.fire_speed)
@@ -1227,13 +1420,58 @@ class Base(pygame.sprite.Sprite):
         b.is_cluster = True
         group.add(b)
         
-    def rain_comets(self, group):
+    def rain_comets(self):
         if time() - self.raining_comets_start_time < self.raining_comets_duration:
             if time() - self.last_comet_time > self.comet_delay:
-                rx = random.randrange(-100, 500)
+                rx = random.randrange(100, int(screen_width * 0.9))
                 comet = Comet(raining_comet_image, (rx, -200))
-                group.add(comet)
+                player_bullet_group.add(comet)
                 self.last_comet_time = time()
+                
+    def deploy_defense_flares(self):
+        ry = random.randrange(self.rect.top, self.rect.bottom)
+        defense_flare = Flare(laser_flare, self.pos, (self.rect.right, ry))
+        defense_flare.fixed = True
+        player_defenses_group.add(defense_flare)
+        self.last_flare_deployed_time = time()
+        
+    def deflect_lasers(self, laser):
+        laser.is_hostile = False
+        laser.deflected = True
+        laser.deflected_from_pos = pygame.math.Vector2(self.pos)
+        
+    def handle_special_attack_timer(self, cooldown, duration):
+        if self.special_attack_used is True:
+            if self.special_attack_in_use != 'None':
+                if time() - self.special_attack_start_time >= duration:
+                    self.special_attack_start_time = time()
+                    self.special_attack_in_use = 'None'
+                    self.rapid_fire_delay = 1
+                    rapid_fire_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Rapid Fire"]}')
+                    cluster_shot_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Cluster Shots"]}')
+                    meteor_shower_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Meteor Shower"]}')
+                    raining_comets_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Raining Comets"]}')
+                    vaporize_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Vaporizers"]}')
+            elif self.special_attack_in_use == 'None':
+                if time() - self.special_attack_start_time >= cooldown:
+                    self.special_attack_used = False
+                
+    def handle_special_defense_timer(self, cooldown, duration):
+        if self.special_defense_used is True:
+            if self.special_defense_in_use != 'None':
+                if time() - self.special_defense_start_time > duration:
+                    self.special_defense_start_time = time()
+                    self.special_defense_in_use = 'None'
+                    self.poison_antidote_applied = False
+                    self.absorb_electric_shock = False
+                    shock_absorber_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Shock Absorbers"]}')
+                    poison_antidote_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Poison Antidote"]}')
+                    flares_defense_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Flares"]}')
+                    deflection_defense_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Deflection"]}')
+                    magnetic_mine_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Magnetic Mine"]}')
+            elif self.special_defense_in_use == 'None':
+                if time() - self.special_defense_start_time >= cooldown:
+                    self.special_defense_used = False
          
         
                         
@@ -1247,8 +1485,6 @@ class Shield(pygame.sprite.Sprite):
         self.stats = stats
         self.health = self.stats['Max Health']
         self.last_regen_time = time()
-        self.poisoned_amount = 0
-        self.poisoned = False
         self.health_bar_label = Feedback('Shield', ui_font, (0, 0))
         
     def update(self, container):
@@ -1266,26 +1502,11 @@ class Shield(pygame.sprite.Sprite):
         pygame.draw.rect(screen, 'blue', max_health_bar, border_radius=5)
         pygame.draw.rect(screen, 'cyan', current_health_bar, border_radius=5)
         
-    def poisoned_damage(self):
-        if self.poisoned_amount > 0:
-            if self.health - 10 <= 0:
-                self.health = 0
-                self.poisoned_amount = 0
-            else:
-                self.health -= 10
-                self.poisoned_amount -= 10
-                self.image.set_alpha(255)
-        else:
-            self.poisoned = False
-        
     def show(self):
-        if self.poisoned is True:
-            self.poisoned_damage()
         if self.image.get_alpha() > 0:
             img_alpha = self.image.get_alpha()
             self.image.set_alpha(img_alpha - 3)
         if self.health <= 0:
-            self.stats['Status'] = 'Inactive'
             self.kill()
         if self.health < self.stats['Max Health'] and self.stats['Health Regeneration'] == 'Active':
             self.regenerate()
@@ -1334,16 +1555,18 @@ class EnemyShield(pygame.sprite.Sprite):
         self.upgrade_health_amount = 1.2
         
     def update(self):
-        if self.active is True:
+        if self.active is True and self.connected_ship.alive():
             if pygame.sprite.spritecollide(self, player_bullet_group, False):
                 if pygame.sprite.spritecollide(self, player_bullet_group, False, pygame.sprite.collide_mask):
-                    b = pygame.sprite.spritecollide(self, player_bullet_group, False, pygame.sprite.collide_mask)[0]
-                    if b.mask.overlap(self.mask, (self.rect.x - b.rect.x, self.rect.y - b.rect.y)):                                                 #b.kill()
-                        #pygame.sprite.spritecollide(self, player_bullet_group, True, pygame.sprite.collide_mask)
-                        self.take_damage(b.damage)
-                        b.kill()
+                    for b in pygame.sprite.spritecollide(self, player_bullet_group, True, pygame.sprite.collide_mask):
+                        #if b.mask.overlap(self.mask, (self.rect.x - b.rect.x, self.rect.y - b.rect.y)):                                                 #b.kill()
+                            #pygame.sprite.spritecollide(self, player_bullet_group, True, pygame.sprite.collide_mask)
+                            self.take_damage(b.damage)
+                            #b.kill()
+        if self.connected_ship.alive() is False:
+            self.kill()
         self.show()     
-        self.rect = self.image.get_rect(center=self.connected_ship.pos)
+        self.rect.center = self.connected_ship.pos
         
     def show_health(self):
         difference_ratio = self.health / self.max_health
@@ -1357,15 +1580,9 @@ class EnemyShield(pygame.sprite.Sprite):
             img_alpha = self.image.get_alpha()
             self.image.set_alpha(img_alpha - 3)
             if self.active is True:
-                self.protect()
+                screen.blit(self.image, self.rect)
                 if self.health < self.max_health:
                     self.show_health()
-        if self.health <= 0:
-            self.active = False
-            self.kill() 
-        
-    def protect(self):
-        screen.blit(self.image, self.rect)
         
     def activate(self):
         self.active = True
@@ -1373,7 +1590,12 @@ class EnemyShield(pygame.sprite.Sprite):
         self.image.set_alpha(255)
         
     def take_damage(self, amount):
-        self.health -= amount
+        if self.health - amount <= 0:
+            self.health = 0
+            self.active = False
+            self.kill()
+        else:
+            self.health -= amount
         self.image.set_alpha(255)
         
         
@@ -1383,10 +1605,34 @@ class StatsContainer:
         self.image = image
         self.pos = pygame.math.Vector2(pos)
         self.rect = self.image.get_rect(center=self.pos)
-        
-    def open_container(self):
-        pass
-        #slide container up from the bottom
+        self.outline_timer_rect = pygame.Rect(self.rect.left + (self.rect.width * 0.1), self.rect.top - 20, self.rect.width * 0.8, 10)
+        self.baseline_timer_rect = pygame.Rect(self.outline_timer_rect.left + 2, self.outline_timer_rect.top + 2, self.outline_timer_rect.width - 4, 6)
+        self.solid_timer_rect = pygame.Rect(self.baseline_timer_rect.left, self.baseline_timer_rect.top, self.baseline_timer_rect.width, 6)
+                
+    def show_timer(self, state, start_time, duration, cooldown):
+        if state != 'None':
+            try:
+                width_diff = (duration - (time() - start_time)) / duration
+            except ZeroDivisionError:
+                width_diff = 1
+                pass
+            if (time() - start_time) < duration:
+#                self.solid_timer_rect.width = 0
+#            else:
+                self.solid_timer_rect.width = self.baseline_timer_rect.width * width_diff
+        elif state == 'None':
+            try:
+                width_diff = (time() - start_time) / cooldown
+            except ZeroDivisionError:
+                width_diff = 1
+                pass
+            if time() - start_time < cooldown:
+                self.solid_timer_rect.width = self.baseline_timer_rect.width * width_diff
+            else:
+                self.solid_timer_rect.width = self.baseline_timer_rect.width
+                       
+        pygame.draw.rect(screen, 'green', self.solid_timer_rect, border_radius=10)
+        pygame.draw.rect(screen, 'blue', self.outline_timer_rect, 2, border_radius=10)
         
     def close_container(self):
         pass
@@ -1405,15 +1651,21 @@ class Turret:
         self.image = image
         self.idle_image = image
         self.updated_image = image
-        self.manipulated_electrocuted_image = electrocuted_turret
+        self.upgrading_image = image
+        self.manipulated_electrocuted_image = electrocuted_turret        
         self.electrocuted_image = electrocuted_turret
+        self.frozen_image = frozen_turret_image
+        self.mask = pygame.mask.from_surface(self.upgrading_image)
+        self.mask_surf = self.mask.to_surface(setcolor='yellow', unsetcolor=(0, 0, 0, 0)).convert_alpha()
         self.updated_rect = self.updated_image.get_rect(center=pygame.math.Vector2(pos))
+        self.upgrading_rect = self.upgrading_image.get_rect(center=pygame.math.Vector2(pos))
         self.idle_rect = self.idle_image.get_rect(center=pygame.math.Vector2(pos))
         self.pos = pygame.math.Vector2(pos)
         self.rect = self.image.get_rect(center=self.pos)
         self.stats = stats
         self.full_range = screen_width - player_base.rect.right
         self.last_shot_time = time()
+        self.selected_for_upgrade = False
         self.hostile = False
         self.is_idle = True
         self.attack = False
@@ -1429,6 +1681,9 @@ class Turret:
         self.reengage_time = random.choice([0.24, 0.4, 0.3, 0.2])
         self.reengage_attempt_time = time()
         self.paralyzed_duration = 2
+        self.frozen = False
+        self.frozen_start_time = time()
+        self.frozen_time_duration = 10
         
     def update(self, group):
         if len(group) > 0:
@@ -1440,8 +1695,13 @@ class Turret:
             if self.target.alive() is False:
                 # Resetting target position
                 self.target_set = False
-        if self.paralyzed is True:
+        if self.paralyzed is True or self.frozen is True:
             self.attack = False
+            
+    def draw_for_upgrades(self):
+        if self.selected_for_upgrade is True:
+            self.show_selected_highlight()
+        screen.blit(self.upgrading_image, self.upgrading_rect)
         
     def draw(self):
         if self.paralyzed is False:
@@ -1458,7 +1718,29 @@ class Turret:
                     screen.blit(self.electrocuted_image, self.idle_rect)
             else:
                 self.paralyzed = False
-            
+        elif self.frozen is True:
+            self.attack = False
+            if 0 < time() - self.frozen_start_time < self.frozen_time_duration:
+                screen.blit(self.frozen_turret, self.idle_rect)
+            if time() - self.frozen_start_time >= self.frozen_time_duration:
+                self.frozen = False
+                
+    def show_selected_highlight(self):
+        offset = 3
+        screen.blit(self.mask_surf, (self.upgrading_rect.x+offset, self.upgrading_rect.y))
+        screen.blit(self.mask_surf, (self.upgrading_rect.x-offset, self.upgrading_rect.y))
+        screen.blit(self.mask_surf, (self.upgrading_rect.x, self.upgrading_rect.y+offset))
+        screen.blit(self.mask_surf, (self.upgrading_rect.x, self.upgrading_rect.y+offset))
+        screen.blit(self.mask_surf, (self.upgrading_rect.x+offset, self.upgrading_rect.y-offset))
+        screen.blit(self.mask_surf, (self.upgrading_rect.x+offset, self.upgrading_rect.y+offset))
+        screen.blit(self.mask_surf, (self.upgrading_rect.x-offset, self.upgrading_rect.y-offset))
+        screen.blit(self.mask_surf, (self.upgrading_rect.x-offset, self.upgrading_rect.y+offset))
+        
+    def clicked(self, event):
+        if self.rect.collidepoint(pygame.mouse.get_pos()):
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                return True
+    
     def target_in_range(self):
         if 'Range %' in self.stats:
             if abs(self.target.pos.x - player_base.rect.right) <= (self.stats['Range %'] / 100) * self.full_range:
@@ -1467,6 +1749,7 @@ class Turret:
     def set_idle_image(self, img, angle):
         self.idle_image = pygame.transform.rotate(self.image, angle - 90)
         self.electrocuted_image = pygame.transform.rotate(self.manipulated_electrocuted_image, angle - 90)
+        self.frozen_turret = pygame.transform.rotate(frozen_turret_image, angle - 90)
         self.idle_rect = self.idle_image.get_rect(center = pygame.math.Vector2(self.rect.center))
        
     def lock_on_target(self, target_group):
@@ -1527,7 +1810,7 @@ class Turret:
         self.last_shot_time = time()
         
     def help_shoot(self, group):
-        if time() - self.last_shot_time >= self.stats['Cooldown (secs)']:
+        if time() - self.last_shot_time >= self.stats['Cooldown (secs)'] / level['Speed']:
             if self.target.alive() is True:
                 hits = [self.stats['Damage'], int(self.stats['Damage'] * self.stats['Critical Hit'])]
                 hit_weights = np.array([100 - self.stats['Critical Hit Chance %'], self.stats['Critical Hit Chance %']])
@@ -1569,16 +1852,30 @@ class EnemyTurret(pygame.sprite.Sprite):
         self.engage = False
         self.target_set = False
         self.target = player_base
-        self.special_in_use = None
+        self.teleporter = False
+        self.last_teleport_time = time()
         self.last_flare_deploy_time = time()
         
     def update(self, dt):
         self.fire_at_player()
         self.hit_by_player()
+        if self.teleporter is True:
+            if time() - self.last_teleport_time >= 2:
+                self.teleport()
         if self.stats['Health'] < self.max_health:
             self.show_health()
         if self.stats['Health'] <= 0:
             self.kill()
+            
+    def teleport(self):
+        animations_group.add(Animation(impact_animation, 1, self.pos))
+        if self.pos.y < self.target.pos.y:
+            self.pos.y += screen_width * 0.25
+        elif self.pos.y > self.target.pos.y:
+            self.pos.y -= screen_width * 0.25
+        self.aim_at(self.target)
+        self.rect.center = self.pos
+        animations_group.add(Animation(impact_animation, 1, self.pos))
             
     def defense_flares(self):
         b = Bullet(laser_flare, self.rect.center, self.stats['Damage'] / 2, self.fire_speed / 2)
@@ -1622,7 +1919,7 @@ class EnemyTurret(pygame.sprite.Sprite):
                 b = Bullet(enemy_turret_laser, self.rect.center, self.stats['Damage'], self.fire_speed / 2)
                 b.is_hostile = True
                 b.locate_target(self.target.rect.center)
-                b.set_velocity(target=self.target)
+                b.set_velocity(self.target.pos)
                 enemy_bullet_group.add(b)
                 self.last_shot_time = time()  
                 
@@ -1662,9 +1959,11 @@ class Enemy(pygame.sprite.Sprite):
         self.range = stats['Range']
         self.speed = self.stats['Speed']
         self.fire_speed = 400
+        self.shield_group = pygame.sprite.GroupSingle()
         self.shield = self.create_shield()
         self.shot_duration = 0
         self.last_shot_time = time()
+        self.last_stinger_shot_time = time()
         self.beam_start_time = time()
         self.beam_rect = pygame.Rect(self.rect.centerx, self.rect.centery - 10, 100, 20)
         self.last_regen_time = time()
@@ -1691,6 +1990,7 @@ class Enemy(pygame.sprite.Sprite):
         self.black_hole_death = False
         self.black_hole = None
         self.healer = False
+        self.is_boss = False
         if self.has_special():
             if self.stats['Special'] == 'Radial Healing':
                 self.health_recovery_ring = HealingRing(healer_ring_with_effect_image, self.pos)
@@ -1703,11 +2003,11 @@ class Enemy(pygame.sprite.Sprite):
             if self.shield.active is True:
                 self.shield.update()       
                              
-        if self.health < self.max_health and self.image in enemy_ships:
+        if self.health < self.max_health and self.is_boss is False:
             self.show_health()
             
         # Checking if enemy type is a boss
-        if self.image in enemy_boss_images:           
+        if self.is_boss is True:           
                 if self.stats['Special'] == 'Spawn Turrets':
                 # Boss number 2 firing Special shot
                     if self.pos.x < screen_width + 100:
@@ -1718,9 +2018,9 @@ class Enemy(pygame.sprite.Sprite):
                                                     
                 elif self.stats['Special'] == 'Drones':
                 # Boss number 3 spawns mini drones to attack
-                    if self.in_range(player_base):
+                    if self.rect.left < screen_width:
                         if self.num_of_drones < self.drone_spawns:
-                            if time() - self.last_shot_time >= 0.5:
+                            if time() - self.last_shot_time >= 0.25:
                                 if player_base.stats['Health'] > 0:
                                     self.spawn_drone_shot()
                                     self.num_of_drones += 1
@@ -1732,7 +2032,7 @@ class Enemy(pygame.sprite.Sprite):
                         if player_base.stats['Health'] > 0:
                             if 0 < time() - self.engage_missiles_time < self.engage_missiles_duration:
                                 if time() - self.last_missile_shot_time >= 0.5:
-                                    self.fire_side_missile(enemy_missile_group)
+                                    self.fire_side_missile()
                                     self.last_missile_shot_time = time()
                                     
                             # Boss will re-engage missile launchers
@@ -1740,6 +2040,7 @@ class Enemy(pygame.sprite.Sprite):
                                 self.engage_missiles_time = time()
                                 
                 if self.stats['Special'] == 'Laser Deflection':
+                    #self.deflect_lasers()
                     pass
                                                                      
                 if self.stats['Special'] == 'Gold Laser':
@@ -1751,7 +2052,22 @@ class Enemy(pygame.sprite.Sprite):
                             if time() - self.last_shot_time + self.shot_duration > self.cooldown:
                                 self.last_shot_time = time()
                             if time() - self.last_shot_time <= self.shot_duration:
-                                self.fire_laser_beam(laser_beam_group)
+                                self.fire_laser_beam()
+                             
+                # Boss number 9 shoots out electric bolts every 5 seconds
+                # Boss will shoot out Missiles in between shooting out bolts
+                if self.stats['Special'] == 'Stinger':
+                    if self.in_range(player_base):
+                        if player_base.stats['Health'] > 0:
+                            if time() - self.turret_spawn_time >= 20:
+                                self.spawn_firing_orbs()
+                                self.turret_spawn_time = time()
+                            if time() - self.last_missile_shot_time >= 1:
+                                self.fire_side_missiles()
+                                self.last_missile_shot_time = time()
+                            if time() - self.last_stinger_shot_time >= self.cooldown * 2:
+                                self.shoot_stinger_bolts()
+                                self.last_stinger_shot_time = time()
             
         if self.health <= 0:
             self.kill()
@@ -1760,9 +2076,9 @@ class Enemy(pygame.sprite.Sprite):
                 self.hydra_spawn()
             elif self.stats['Special'] == 'Bomb Drop':
                 self.drop_bomb()
-                    
-        if self.moving is True:
-            if self.black_hole_death is True:
+                                 
+        if self.moving is True:            
+            if self.black_hole_death is True and self.black_hole.alive():
                 self.pos.move_towards_ip(self.black_hole.pos, 5)               
                 self.rect.center = self.pos
             else:
@@ -1778,8 +2094,10 @@ class Enemy(pygame.sprite.Sprite):
                     
         if self.stats['Special'] == 'Teleport':
             if time() - self.last_teleport_time >= self.teleport_delay:
-                self.teleport()
-                self.last_teleport_time = time()
+                if pygame.sprite.spritecollide(self, player_bullet_group, False):
+                    self.fire()
+                    self.teleport()
+                    self.last_teleport_time = time()
             
         # Self healing ship
         if self.stats['Special'] == 'Health Regeneration':
@@ -1787,11 +2105,9 @@ class Enemy(pygame.sprite.Sprite):
         
         if self.stats['Special'] == 'Linger Flares':
             if self.in_range(player_base):
-                if time() - self.last_flare_deploy_time > 0.5:
-                    if self.rect.right < screen_width:
-                        self.deploy_flares(flares_group)
-                        self.last_flare_deploy_time = time()
-            
+                if time() - self.last_flare_deploy_time > 0.1:
+                    self.deploy_flares()
+                            
         if self.stats['Special'] == 'Kamikaze':
             self.pos.x -= self.speed * delta_time * level['Speed']
             self.rect.center = self.pos
@@ -1809,13 +2125,14 @@ class Enemy(pygame.sprite.Sprite):
             if self.stats['Defense'] == 'Flares':
                 if self.in_range(player_base):
                     if time() - self.last_flare_deploy_time > 0.2:
-                        self.deploy_flares(flares_group)
-                        self.last_flare_deploy_time = time()
-                                    
+                        self.deploy_flares()
+                                                       
         # Enemy is within range to shoot
-        if self.in_range(player_base):
+        if not self.in_range(player_base):
+            self.moving = True        
+        elif self.in_range(player_base):
             self.moving = False
-            if self.black_hole_death is True:
+            if self.black_hole_death is True and self.black_hole.alive():
                 self.pos.move_towards_ip(self.black_hole.pos, 5)
                 self.rect.center = self.pos
             
@@ -1823,7 +2140,7 @@ class Enemy(pygame.sprite.Sprite):
                 if self.tanks_delivered < 5:
                     if time() - self.tank_spawn_time >= 10 and player_base.stats['Health'] > 0:
                         animations_group.add(Animation(spawn_animation, 2, self.pos))
-                        enemy_group.add(Enemy(enemy_ships[23], self.pos, enemy_types['Plasma Tanker']))
+                        enemy_group.add(Enemy(enemy_ships['Acid Tanker.png'], self.pos, enemy_types['Acid Tanker']))
                         self.tank_spawn_time = time()
                         self.tanks_delivered += 1
                     
@@ -1834,40 +2151,36 @@ class Enemy(pygame.sprite.Sprite):
                     self.healing_ring_engaged = True                                
 
             # Enemy firing attacks
-            if time() - self.last_shot_time >= self.cooldown:
+            if time() - self.last_shot_time >= self.cooldown / level['Speed']:
                 if player_base.stats['Health'] > 0:
-                        if self.stats['Special'] == 'Double Shot':
-                            self.double_shot()
-                        elif self.stats['Special'] == 'Triple Shot':
-                            self.triple_shot()
-                        elif self.stats['Special'] == 'Poison Laser':                  
-                            self.poison_shot(self.damage)
-                        elif self.stats['Special'] == 'Shield Destroy':
-                            if base_shield.stats['Status'] == 'Active':
-                                self.destroy_shield_shot()
-                            else:
-                                self.fire()
-                        elif self.stats['Special'] == 'Wave Blast':
-                            self.wave_blast(group)
-                        elif self.stats['Special'] == 'Speed Shot':
-                            self.fire_speed = 500
-                            self.fire()
-                        elif self.stats['Special'] == 'Charge Bolt':
-                            self.emit_charge_bolt()
-                        elif self.stats['Special'] == 'Cluster Bomb':
-                            self.cluster_bombs()
+                    if self.stats['Special'] == 'Double Shot':
+                        self.double_shot()
+                    elif self.stats['Special'] == 'Triple Shot':
+                        self.triple_shot()
+                    elif self.stats['Special'] == 'Poison Laser':                  
+                        self.poison_shot(self.damage)
+                    elif self.stats['Special'] == 'Shield Destroy':
+                        if base_shield.health > 0:
+                            self.destroy_shield_shot()
                         else:
-                            self.fire()                            
-                    #else:
-                        #self.fire(group)
-                        self.last_shot_time = time()
-                    
+                            self.fire()
+                    elif self.stats['Special'] == 'Wave Blast':
+                        self.wave_blast()
+                    elif self.stats['Special'] == 'Speed Shot':
+                        self.fire_speed = 500
+                        self.fire()
+                    elif self.stats['Special'] == 'Missile Shot':
+                        self.fire_missile()
+                    elif self.stats['Special'] == 'Charge Bolt':
+                        self.emit_charge_bolt()
+                    elif self.stats['Special'] == 'Cluster Bomb':
+                        self.cluster_bombs()
+                    else:
+                        self.fire()                            
+                    self.last_shot_time = time()
+                
         self.recovery_collision()
-        
-        # destroy ship if its size is less than 5px wide and 5px tall
-        if self.image.get_size()[0] <= 5 and self.image.get_size()[1] <= 5:
-             self.kill()
-             
+          
     def draw(self, surface):
         surface.blit(self.image, self.rect)
         
@@ -1878,7 +2191,7 @@ class Enemy(pygame.sprite.Sprite):
             self.health -= amount 
     
     def in_range(self, base):
-        if abs((self.pos.x - self.image.get_width() / 2) - base.rect.right) <= self.range:
+        if abs((self.pos.x - self.image.get_width() / 2) - player_base.rect.right) <= self.range:
             return True
             
     def recovery_collision(self):
@@ -1890,11 +2203,18 @@ class Enemy(pygame.sprite.Sprite):
                         self.regenerate_health()
                         
     def paralyze_turret(self):
+        froze_turret = False
         for h in helper_turret_group:
-            if h.paralyzed is False:
-                pygame.draw.line(screen, 'yellow', self.pos, h.pos, 5)
-                print(self.pos.lerp(h.pos, 0.5))
-            
+            if froze_turret is True:
+                break
+            elif froze_turret is False:
+                if h.frozen is False:
+                    pygame.draw.line(screen, 'cyan', self.pos, h.pos, 5)
+                    h.frozen = True
+                    h.frozen_start_time = time()
+                    froze_turret = True
+                    break
+                         
     def drone(self, pos):      
         drone_image = pygame.transform.scale_by(self.image, 0.5)
         drone_stats = self.stats.copy()
@@ -1910,15 +2230,40 @@ class Enemy(pygame.sprite.Sprite):
         ring.owner_ship = self.self
         healing_ring_group.add(ring)
         
+    #def deflect_lasers(self):
+#        if pygame.sprite.spritecollide(self, player)
+        
     def emit_charge_bolt(self):
         cb = ChargeBolt(charge_bolt_image, self.pos, self.damage)
         enemy_bullet_group.add(cb)
-          
-    def fire_laser_beam(self, group):
-        b = Laser(solid_laser_image, self.rect.center, self.damage)
-        group.add(b)
         
-    def fire_side_missile(self, group):
+    def shoot_stinger_bolts(self):
+        top_bolt = ChargeBolt(charge_bolt_image, (self.pos.x, self.rect.top + (self.rect.height * 0.3)), self.damage)
+        bottom_bolt = ChargeBolt(charge_bolt_image, (self.pos.x, self.rect.top + (self.rect.height * 0.7)), self.damage)
+        enemy_bullet_group.add(top_bolt, bottom_bolt)
+          
+    def fire_laser_beam(self):
+        b = Laser(solid_laser_image, self.rect.center, self.damage)
+        enemy_bullet_group.add(b)
+        
+    def fire_missile(self):
+        b = Missile(side_missile_image, self.pos, self.damage * 1.5,  self.fire_speed)
+        b.threshold = pygame.math.Vector2((b.pos.x - 10, b.pos.y))
+        b.target = pygame.math.Vector2(player_base.rect.center)
+        enemy_bullet_group.add(b)
+        
+    def fire_side_missiles(self):
+        if self.missile_launcher_engaged == 'Top':
+            b = Missile(side_missile_image, (self.pos.x, self.pos.y - 90), self.damage * 1.5,  self.fire_speed)
+            self.missile_launcher_engaged = 'Bottom'
+        elif self.missile_launcher_engaged == 'Bottom':
+            b = Missile(side_missile_image, (self.pos.x, self.pos.y + 90), self.damage * 1.5,  self.fire_speed)
+            self.missile_launcher_engaged = 'Top'
+        b.threshold = pygame.math.Vector2((b.pos.x - 10, b.pos.y))
+        b.target = pygame.math.Vector2(player_base.rect.center)
+        enemy_bullet_group.add(b)
+        
+    def fire_side_missile(self):
         if self.missile_launcher_engaged == 'Top':
             b = Missile(side_missile_image, (self.pos.x + 90, self.pos.y - 90), self.damage * 1.5,  self.fire_speed)
             self.missile_launcher_engaged = 'Bottom'
@@ -1927,20 +2272,27 @@ class Enemy(pygame.sprite.Sprite):
             self.missile_launcher_engaged = 'Top'
         b.threshold = pygame.math.Vector2((b.pos.x - 10, b.pos.y))
         b.target = pygame.math.Vector2(player_base.rect.center)
-        group.add(b)
+        enemy_bullet_group.add(b)
                 
-    def teleport(self, base, group):
-        group.add(Animation(impact_animation, 1, self.pos))
-        self.pos.x += random.randint(150, 500)
-        self.pos.y = random.randrange(int(player_base.rect.top + self.rect.height), int(player_base.rect.bottom - self.rect.height / 2))
+    def teleport(self):
+        animations_group.add(Animation(impact_animation, 1, self.pos))
+        self.pos.x += random.randint(150, 200)
+        self.pos.y = random.randrange(int(player_base.rect.top + (self.rect.height / 2)), int(player_base.rect.bottom - self.rect.height / 2))
         self.rect.center = self.pos
-        group.add(Animation(impact_animation, 1, self.pos))
+        animations_group.add(Animation(impact_animation, 1, self.pos))
         
     def spawn_drone_shot(self):
         y = (player_base.rect.top + 50) + (50 * self.num_of_drones+1)
-        orb = SpawnOrb(turret_spawn_orb, self.pos, (self.rect.x - 200, y))
+        orb = SpawnOrb(turret_spawn_orb, self.pos, (screen_width / 2, y))
         orb.spawn_item = Enemy(self.image, orb.spawn_pos, self.stats.copy())
         spawn_orb_group.add(orb)
+        
+    def spawn_firing_orbs(self):
+        orb1 = SpawnOrb(turret_spawn_orb, self.pos, (screen_width * 0.4, self.rect.top))
+        orb2 = SpawnOrb(turret_spawn_orb, self.pos, (screen_width * 0.4, self.rect.bottom))
+        orb1.spawn_item = Bullet(enemy_turret_laser, orb1.pos, (self.damage * 0.75), self.fire_speed)
+        orb2.spawn_item = Bullet(enemy_turret_laser, orb2.pos, (self.damage * 0.75), self.fire_speed)
+        spawn_orb_group.add(orb1, orb2)
         
     def spawn_defense_wall(self):
         orb1 = SpawnOrb(turret_spawn_orb, self.pos, (screen_width * 0.45, player_base.rect.top))
@@ -2004,6 +2356,7 @@ class Enemy(pygame.sprite.Sprite):
             _shield = pygame.transform.scale(shield_main, (self.rect.width + 50, self.rect.height + 50))
             shield = EnemyShield(_shield, self.rect.center, self.max_health)
             shield.connected_ship = self.self
+            enemy_shields_group.add(shield)
             return shield
         else:
             return None
@@ -2037,63 +2390,45 @@ class Enemy(pygame.sprite.Sprite):
         enemy_bullet_group.add(b)
         
     def destroy_shield_shot(self):
-        b = Bullet(destroy_shield_laser, self.rect.center, base_shield.stats['Max Health'],  self.fire_speed)
+        b = Bullet(destroy_shield_laser, self.rect.center, base_shield.health, self.fire_speed)
         b.is_hostile = True
         enemy_bullet_group.add(b)
         
-    def wave_blast(self, group):
+    def wave_blast(self):
         b = Bullet(wave_blast_image, (self.rect.centerx - 25, self.rect.centery), self.damage, self.fire_speed)
         b.is_hostile = True
         b.wave_blast = True 
-        group.add(b)
+        enemy_bullet_group.add(b)
         
-    def deploy_flares(self, group):
-        for i in range(2):
-            b = Bullet(laser_flare, self.rect.center, self.damage / 2, self.fire_speed / 2)
-            b.is_hostile = True
-            b.flare = True
-            b.is_flare = True
-            b.flare_id = i + 1
-            b.set_flare()
-            b.flared_pos = pygame.math.Vector2(self.rect.left - 10, random.randint(self.rect.top, self.rect.bottom))
-            group.add(b)
+    def deploy_flares(self):
+        flared_pos = pygame.math.Vector2(self.rect.left - 10, random.randint(self.rect.top, self.rect.bottom))
+        b = Flare(laser_flare, self.pos, flared_pos)
+        b.fixed = True
+        b.is_hostile = True
+        enemy_flares_group.add(b)
+        self.last_flare_deploy_time = time()
         
     def hydra_spawn(self):
          if self.alive() is False:
-             index = np.where(enemy_ships == self.image)[0][0]
-             new_ship = enemy_ships[index - 1]
-             new_stats = enemy_types[enemy_names[index - 1]]
+             new_ship = enemy_ships['Stingumplyer.png']
+             new_stats = enemy_types['Stingumplyer']
              spawn_offset = 50
-             enemy_group.add(Enemy(new_ship, (self.pos.x, self.pos.y - spawn_offset), new_stats))
-             enemy_group.add(Enemy(new_ship, (self.pos.x, self.pos.y + spawn_offset), new_stats))
-            
-    def spawn_reinforcements(self):
-         x_offset = 75
-         y_offset = -75
-         index = np.where(enemy_ships == self.image)[0][0]
-         for i in range(3):
-             x = self.rect.centerx + x_offset
-             y = self.rect.centery + y_offset
-             e = Enemy(enemy_ships[index - 2], (x, y), enemy_types[enemy_names[index - 2]])
-             enemy_group.add(e)
-             if i == 1:
-                 x_offset *= 2
-                 y_offset = 0
-             else:
-                 y_offset *= -1
-                 
+             enemy_group.add(Enemy(new_ship, (self.pos.x, self.pos.y - (spawn_offset / 2)), new_stats))
+             enemy_group.add(Enemy(new_ship, (self.pos.x, self.pos.y + (spawn_offset / 2)), new_stats))
+                       
     def drop_bomb(self):
         b = Bomb(enemy_rubble_bomb, self.rect.center, self.damage * 2, 80)
         b.is_hostile = True
+        b.set_velocity(self.pos)
         enemy_bullet_group.add(b)
         
     def cluster_bombs(self):
-        y_moves = [10, 0, -10]
+        y_moves = [0.1, 0, -0.1]
         for y in y_moves:
             b = Bomb(enemy_rubble_bomb, self.rect.center, self.damage * 2, 80)
             b.is_hostile = True
-            b.velocity_vector.y = y
-            bomb_group.add(b)
+            b.set_velocity(pygame.math.Vector2(self.pos.x, self.pos.y + y))
+            enemy_bullet_group.add(b)
         
         
 class SpawnOrb(pygame.sprite.Sprite):
@@ -2112,19 +2447,30 @@ class SpawnOrb(pygame.sprite.Sprite):
          self.spawn = False
          self.traveling = True
          self.stopped_traveling_time = time()
+         self.last_shot_time = time()
+         self.creation_time = time()
           
     def update(self, self_group):
         if self.traveling is False:
             if self.ready_to_spawn():
-                animations_group.add(Animation(spawn_animation, 3, self.pos))
+                
                 if type(self.spawn_item) == EnemyTurret:
+                    animations_group.add(Animation(spawn_animation, 3, self.pos))
                     enemy_group.add(EnemyTurret(turret_extra, self.pos, enemy_turret_stats.copy()))
+                    self.kill()
                 elif type(self.spawn_item) == Enemy:
+                    animations_group.add(Animation(spawn_animation, 3, self.pos))
                     boss_image = game['Current Level'].get_boss()
                     boss_stats = game['Current Level'].get_boss_stats()
                     drone = self.spawn_drone(boss_image, boss_stats)
                     enemy_group.add(drone)
-                self.kill()                      
+                    self.kill()
+                elif type(self.spawn_item) == Bullet:
+                    if time() - self.last_shot_time >= 0.5:
+                        self.fire_lasers()
+                        self.last_shot_time = time()
+                    if time() - self.stopped_traveling_time >= 10:
+                        self.kill()      
                         
         # Orb is moving to its position to Spawn its spawn_item
         if self.traveling is True:
@@ -2153,12 +2499,20 @@ class SpawnOrb(pygame.sprite.Sprite):
         if self.ready_to_spawn():
             self.spawn = True
              
+    def fire_lasers(self):
+        b = Bullet(enemy_turret_laser, self.rect.center, 2000, 550)
+        #b.is_hostile = True
+        b.shot_from_orb = True
+        b.set_velocity(player_base.pos)
+        b.locate_target(player_base.pos)
+        enemy_bullet_group.add(b)
+    
     def spawn_drone(self, image, stats):
         drone = pygame.transform.scale_by(image, 0.25)
         return Enemy(drone, self.pos, stats)     
          
     def ready_to_spawn(self):
-        if time() - self.stopped_traveling_time >= 3:
+        if time() - self.stopped_traveling_time >= 1:
             return True
             
                       
@@ -2188,52 +2542,65 @@ class Bullet(pygame.sprite.Sprite):
         self.laser_beam = False
         self.shot_time = time()
         self.firing_ship = None
+        self.deflect = False
+        self.deflected = False
+        self.deflected_from_pos = None
         self.flare_x = 0
         self.flare_y = 0
         self.flare_id = 0
         self.flared_pos = pygame.math.Vector2(self.pos)
         self.hits = 5
         self.spray = False
-        self.velocity_vector = pygame.math.Vector2(0, 0)
+        self.velocity_vector = None
         self.creation_time = time()
+        self.shot_from_orb = False
         
     def update(self):    
-        if self.fired_by_player is True:            
-            self.locate_target(pygame.mouse.get_pos())
-            self.set_velocity()    
-            self.fired_by_player = False           
-        if self.fired_by_helper is True and self.target != None:
-            self.locate_target(self.target.pos)
-            self.set_velocity()
-            self.fired_by_helper = False
-        if self.fired_by_helper is False:
+        if self.fired_by_player is True:
+            if self.velocity_vector == None:      
+                self.locate_target(pygame.mouse.get_pos())
+                self.set_velocity(pygame.mouse.get_pos())    
             self.pos.x += self.velocity_vector.x * game['Delta Time'] * level['Speed']
             self.pos.y += self.velocity_vector.y * game['Delta Time'] * level['Speed']
-            self.rect.center = self.pos
-        if self.spray is True:
-            # fired by player
-            self.set_velocity()   
+        if self.fired_by_helper is True:
+            if self.velocity_vector == None:
+                self.locate_target(self.target.pos)
+                self.set_velocity(self.target.pos)
             self.pos.x += self.velocity_vector.x * game['Delta Time'] * level['Speed']
             self.pos.y += self.velocity_vector.y * game['Delta Time'] * level['Speed']
-            self.rect.center = self.pos
-            
-        if self.is_cluster is True and self.rect.left >= player_base.rect.right:
+                    
+        if self.is_cluster is True and self.pos.distance_to(player_base.pos) >= player_base.rect.width / 2:
             self.form_cluster(player_bullet_group)           
             
-        if self.flare is True and self.is_hostile is True:
-            self.flare_out()
-            if time() - self.creation_time > 10:
-                self.kill()             
-        
-        if self.is_hostile is True and self.flare is False:          
+        if self.is_hostile is True:
+            #if self.deflected is True:
+#                if self.deflected_from_pos == None:
+#                    self.ricochet()
+#                self.pos.x += self.velocity_vector.x * game['Delta Time']
+#                self.pos.y += self.velocity_vector.y * game['Delta Time']
+            #if self.deflected is False:
             self.pos.x -= self.fire_speed * game['Delta Time'] * level['Speed']
-            self.rect.center = self.pos
+            
             if self.wave_blast is True:
-                self.force_push()           
+                self.force_push()   
+                
+        if self.shot_from_orb is True:
+            self.pos.x += self.velocity_vector.x * game['Delta Time'] * level['Speed']
+            self.pos.y += self.velocity_vector.y * game['Delta Time'] * level['Speed']
+                
+        if self.deflected is True:
+            if self.deflect is False:
+                self.ricochet()
+                self.deflect = True
+            self.pos.x -= self.velocity_vector.x * game['Delta Time'] * level['Speed']
+            self.pos.y -= self.velocity_vector.y * game['Delta Time'] * level['Speed']
 
         if self.rect.centerx < -10 or self.rect.centerx > screen_width or \
         self.rect.centery < 0 or self.rect.centery > screen_height:
             self.kill()
+            
+        # update position of image rect to match pos
+        self.rect.center = self.pos
                    
     def locate_target(self, target_pos):
         # finds target and rotates image to point at target position
@@ -2243,42 +2610,50 @@ class Bullet(pygame.sprite.Sprite):
         self.image = pygame.transform.rotate(self.image, angle - 90)
         self.rect = self.image.get_rect(center = self.rect.center)
         
-    def set_velocity(self, target=None):
+    def set_velocity(self, target_pos):
         if self.fired_by_helper is True:
-            pos = pygame.math.Vector2(self.target.rect.center)
+            pos = pygame.math.Vector2(target_pos)
             distance = pygame.math.Vector2(self.rect.center).distance_to(pos)
-            self.velocity_vector.x = self.fire_speed * (self.target.pos.x - self.pos.x) / distance
-            self.velocity_vector.y = self.fire_speed * (self.target.pos.y - self.pos.y) / distance
+            vx = self.fire_speed * (target_pos.x - self.pos.x) / distance
+            vy = self.fire_speed * (target_pos.y - self.pos.y) / distance
+            self.velocity_vector = pygame.math.Vector2(vx, vy)
         elif self.is_hostile is True:
-            pos = pygame.math.Vector2(target.rect.center)
+            pos = pygame.math.Vector2(target_pos)
             distance = pygame.math.Vector2(self.rect.center).distance_to(pos)
-            self.velocity_vector.x = self.fire_speed * (target.rect.centerx - self.pos.x) / distance
-            self.velocity_vector.y = self.fire_speed * (target.rect.centery - self.pos.y) / distance
+            vx = self.fire_speed * (target_pos.x - self.pos.x) / distance
+            vy = self.fire_speed * (target_pos.y - self.pos.y) / distance
+            self.velocity_vector = pygame.math.Vector2(vx, vy)
         elif self.cluster is True:
             self.set_flare()
             distance = pygame.math.Vector2(self.rect.center).distance_to(self.flared_pos)
-            self.velocity_vector.x = self.fire_speed * (self.flared_pos.x - self.pos.x) / distance
-            self.velocity_vector.y = self.fire_speed * (self.flared_pos.y - self.pos.y) / distance
+            vx = self.fire_speed * (self.flared_pos.x - self.pos.x) / distance
+            vy = self.fire_speed * (self.flared_pos.y - self.pos.y) / distance
+            self.velocity_vector = pygame.math.Vector2(vx, vy)
             self.locate_target((self.flared_pos.x, self.flared_pos.y))
-        elif self.spray is True:
-            distance = pygame.math.Vector2(player_base.rect.center).distance_to(self.pos)
-            self.velocity_vector.x = self.fire_speed * (self.pos.x - player_base.rect.centerx) / distance
-            self.velocity_vector.y = self.fire_speed * (self.pos.y - player_base.rect.centery) / distance
-            self.locate_target((player_base.rect.centerx, player_base.rect.centery))
         else:
-            pos = pygame.math.Vector2(pygame.mouse.get_pos())
+            pos = pygame.math.Vector2(target_pos)
             distance = pygame.math.Vector2(self.rect.center).distance_to(pos)
-            self.velocity_vector.x = self.fire_speed * (pygame.mouse.get_pos()[0] - self.rect.x) / distance
-            self.velocity_vector.y = self.fire_speed * (pygame.mouse.get_pos()[1] - self.rect.y) / distance
+            vx = self.fire_speed * (pos.x - self.pos.x) / distance
+            vy = self.fire_speed * (pos.y - self.pos.y) / distance
+            self.velocity_vector = pygame.math.Vector2(vx, vy)
             
     def force_push(self):
         if pygame.sprite.spritecollide(self, player_bullet_group, False):
-            for b in pygame.sprite.spritecollide(self, player_bullet_group, False):
-                if b.mask.overlap(self.mask, (self.rect.x - b.rect.x, self.rect.y - b.rect.y)):
+            for b in pygame.sprite.spritecollide(self, player_bullet_group, False, pygame.sprite.collide_mask):
+                if self.mask.overlap(b.mask, (b.rect.x - self.rect.x, b.rect.y - self.rect.y)):
                     b.kill()
                     self.hits -= 1
                     if self.hits == 0:
                         self.kill()
+                        
+    def ricochet(self):
+        x_dist = self.deflected_from_pos.x - self.pos.x
+        y_dist = -(self.deflected_from_pos.y - self.pos.y)
+        angle = math.degrees(math.atan2(y_dist, x_dist))
+        self.image = pygame.transform.rotate(self.image, angle)
+        self.rect = self.image.get_rect(center = self.rect.center)
+        #self.fire_speed *= 0.7
+        self.set_velocity(player_base.rect.center)
                         
     def set_flare(self):
         self.flare_x = random.randint(self.rect.right, self.rect.right + 100)
@@ -2291,10 +2666,14 @@ class Bullet(pygame.sprite.Sprite):
         self.rect.center = self.pos
         
     def form_cluster(self, group):
-        for i in range(2):
+        for i in range(6):
             b = Bullet(laser_cluster_image, self.rect.center, self.damage, self.fire_speed / 5)
             b.cluster = True
-            b.set_velocity()
+            b.fired_by_player = True
+            if i % 2 == 0:
+                b.set_velocity((self.pos.x + 1, self.pos.y + 1))
+            else:
+                b.set_velocity((self.pos.x + 1, self.pos.y - 1))
             group.add(b)
             
             
@@ -2332,13 +2711,13 @@ class Bomb(Bullet):
                 
         # Bomb hits player base
         if pygame.sprite.spritecollide(self, base_group, False):
-            if pygame.sprite.spritecollide(self, base_group, False, pygame.sprite.collide_mask):
+            for b in pygame.sprite.spritecollide(self, base_group, False, pygame.sprite.collide_mask):
+                b.take_damage(self.damage)
                 animations_group.add(Animation(ship_explosion, 2.5, self.pos, ship_explosion_sound))
                 self.kill()
                 
     def break_and_cluster(self):
         points = self.mask.outline(every=10)
-        print(points)
         animations_group.add(Animation(ship_explosion, 2.5, self.pos, ship_explosion_sound))
         self.kill()
         cluster_image = pygame.transform.scale_by(self.image, 0.5)
@@ -2347,23 +2726,13 @@ class Bomb(Bullet):
         max_y_point = 0
         x_offset = 0
         y_offset = 0
-        for point in points:
-            if point[0] > max_x_point:
-                x_offset = point[0]
-                max_x_point += point[0]
-            else:
-                x_offset = -point[0]
-            if point[1] > max_y_point:
-                y_offset = point[1]
-                max_y_point += point[1]
-            else:
-                y_offset = -point[1]
-                
-            cluster_bomb = Bomb(cluster_image, (self.pos.x + (x_offset * 2), self.pos.y + (y_offset * 2)), self.damage * 0.75, self.fire_speed * 2)
+        for point in range(5):
+            cluster_bomb = Bomb(cluster_image, (self.pos.x, self.pos.y), self.damage * 0.75, self.fire_speed * 2)
             cluster_bomb.is_hostile = True
             cluster_bomb.can_cluster = False
-            cluster_bomb.velocity_vector.y = random.choice([-20, 10, 20, -10])
-            bomb_group.add(cluster_bomb)
+            ry = random.choice([-0.2, 0.1, 0.2, -0.1])
+            cluster_bomb.set_velocity(pygame.math.Vector2(self.pos.x - 1, (self.pos.y + ry)))  
+            enemy_bullet_group.add(cluster_bomb)
             
     def flash(self):
         offset = 1
@@ -2380,7 +2749,7 @@ class Bomb(Bullet):
             
 class Meteor(pygame.sprite.Sprite):
     
-    def __init__(self, image, pos, damage, speed):
+    def __init__(self, image, pos):
         super().__init__()
         self.image = pygame.transform.rotate(image, random.randint(10, 250))
         self.rotated_image = image
@@ -2388,29 +2757,14 @@ class Meteor(pygame.sprite.Sprite):
         self.mask = pygame.mask.from_surface(self.image)
         self.rect = self.image.get_rect(center=self.pos)
         self.damage = 1000
-        self.fire_speed = speed
-        self.angle = 0
-        self.rotate_direction = random.choice([-1, 1])
+        self.speed = 300
         
     def update(self):
-        self.pos.y += self.fire_speed * game['Delta Time'] * level['Speed']
-        self.rect = self.image.get_rect(center = pygame.math.Vector2(self.pos))
-        if pygame.sprite.spritecollide(self, enemy_group, False):
-            for ship in pygame.sprite.spritecollide(self, enemy_group, False, pygame.sprite.collide_mask):
-                ship.take_damage(self.damage)
-                self.kill()
+        self.pos.y += self.speed * game['Delta Time']
+        self.rect.center = self.pos
         if self.rect.y > screen_height:
             self.kill()
-            
-    def break_and_cluster(self, group):
-        animations_group.add(Animation(ship_explosion, 2.5, self.pos, ship_explosion_sound))
-        #self.kill()
-        cluster_image = pygame.transform.scale_by(self.image, 0.5)
-        for point in pygame.mask.from_surface(self.image).outline():
-            cluster_bomb = Meteor(self.image, point, self.damage * 0.75, self.fire_speed)
-            group.add(cluster_bomb)
-        self.kill()
-            
+                        
 
 class Laser(pygame.sprite.Sprite):
                
@@ -2421,17 +2775,16 @@ class Laser(pygame.sprite.Sprite):
         self.image = image
         self.rect = self.image.get_rect(center=self.pos)
         
-    def update(self, base_group):
+    def update(self):
         self.pos.x -= 300 * game['Delta Time'] * level['Speed']
         self.rect.center = self.pos
-        self.check_collision_with_base(base_group)
-        if self.rect.right < player_base.rect.right - 50:
-            self.kill()
+        #self.check_collision_with_base(base_group)
         
     def check_collision_with_base(self, group):
         if pygame.sprite.spritecollide(self, group, False):
-            if pygame.sprite.spritecollide(self, group, False, pygame.sprite.collide_mask):
-                player_base.take_damage(self.damage)                    
+            for i in pygame.sprite.spritecollide(self, group, False, pygame.sprite.collide_mask):
+                i.take_damage(self.damage)
+                self.kill()                
                                                             
                     
 class Missile(pygame.sprite.Sprite):
@@ -2473,8 +2826,8 @@ class Missile(pygame.sprite.Sprite):
         
     def collide_with_base(self):
         if pygame.sprite.spritecollide(self, base_group, False):
-            if pygame.sprite.spritecollide(self, base_group, False, pygame.sprite.collide_mask):
-                player_base.take_damage(self.damage)
+            for player_object in pygame.sprite.spritecollide(self, base_group, False, pygame.sprite.collide_mask):
+                player_object.take_damage(self.damage)
                 animations_group.add(Animation(ship_explosion, 2, self.rect.center))
                 self.kill()
                 if game['Sounds'] is True:
@@ -2561,26 +2914,21 @@ class Comet(pygame.sprite.Sprite):
         self.pos.x += 400 * game['Delta Time'] * level['Speed']
         self.pos.y += 400 * game['Delta Time'] * level['Speed']
         self.rect.center = self.pos
-        self.collided_with_enemy()
-        
-    def collided_with_enemy(self):
-        if pygame.sprite.spritecollide(self, enemy_group, False):
-            for ship in pygame.sprite.spritecollide(self, enemy_group, False, pygame.sprite.collide_mask):
-                ship.take_damage(self.damage)
-                self.kill()                                 
-            
+              
                                               
-class BlackHole(pygame.sprite.Sprite):
+class MagneticMine(pygame.sprite.Sprite):
     
     def __init__(self, image, pos):
         super().__init__()
+        self.self = self
         self.pos = pygame.math.Vector2(pos)
         self.rotated_image = image
         self.image = image
+        self.creation_time = time()
         self.rect = self.image.get_rect(center=self.pos)
+        self.duration = 20
         self.angle = 0
         self.speed = 50
-        self.radius = 0.5
         
     def update(self):
         self.image = pygame.transform.rotate(self.rotated_image, self.angle)
@@ -2589,18 +2937,19 @@ class BlackHole(pygame.sprite.Sprite):
             self.angle = 0
         else:
             self.angle -= 1
+        self.engage_magnetic_pull()
+        if time() - self.creation_time > self.duration:
+            self.kill()
             
-    def suck_in_ship(self, ship):
-        ship.pos.move_towards_ip(self.pos, 5)
-        ship_size = ship.image.get_size()
-        #if ship_size[0] > 10:
-            #ship.image = pygame.transform.smoothscale(ship.image, (ship_size[0] - 1, ship_size[1] - 1))
-        #distance = pygame.math.Vector2(self.pos).distance_to(ship.pos)
-#        x_velocity = self.speed * (ship.pos.x - self.pos.x) / distance
-#        y_velocity = self.speed * (ship.pos.y - self.pos.y) / distance
-#        ship.pos.x -= x_velocity
-#        ship.pos.y -= y_velocity
-    
+    def engage_magnetic_pull(self):
+        affected_enemies = pygame.sprite.spritecollide(self, enemy_group, False, pygame.sprite.collide_circle_ratio(3))      
+        collided_enemies = pygame.sprite.spritecollide(self, enemy_group, True, pygame.sprite.collide_mask)
+        for enemy in affected_enemies:           
+            enemy.black_hole_death = True
+            enemy.black_hole = self.self
+        for enemy in collided_enemies:
+            animations_group.add(Animation(ship_explosion, 2.5, enemy.pos))
+   
 
 class Flare(pygame.sprite.Sprite):
     
@@ -2611,29 +2960,42 @@ class Flare(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=self.pos)
         self.flare_pos = pygame.math.Vector2(end_pos)
         self.start_time = time()
-        self.duration = 2
+        self.duration = 20
         self.speed = 100
         self.velocity = self.set_velocity()
         self.recovery_amount = 250
+        self.is_hostile = False 
         self.mini = False
+        self.fixed = False
         
-    def update(self):
-        if time() - self.start_time >= self.duration:
-            self.kill()
-        else:
+    def update(self):            
+        if self.fixed is False:
             self.pos.x += self.velocity.x * game['Delta Time'] * level['Speed']
             self.pos.y += self.velocity.y * game['Delta Time'] * level['Speed']
-                              
-        self.rect = self.image.get_rect(center=self.pos)    
-        screen.blit(self.image, self.rect)
+            if time() - self.start_time >= self.duration / 2:
+                self.kill()
             
+        elif self.fixed is True:
+            self.pos.move_towards_ip(self.flare_pos, 10)
+            if self.is_hostile is False:
+                self.check_collisions(enemy_bullet_group)
+            elif self.is_hostile is True:
+                self.check_collisions(player_bullet_group)
+            if time() - self.start_time >= self.duration:
+                self.kill()          
+        self.rect.center = self.pos
+                
     def set_velocity(self):
         distance = pygame.math.Vector2(self.pos).distance_to(self.flare_pos)
         x_velocity = self.speed * (self.flare_pos.x - self.pos.x) / distance
         y_velocity = self.speed * (self.flare_pos.y - self.pos.y) / distance
         return pygame.math.Vector2((x_velocity, y_velocity))
-          
-                            
+        
+    def check_collisions(self, group):
+        if pygame.sprite.spritecollide(self, group, False):
+            if pygame.sprite.spritecollide(self, group, True, pygame.sprite.collide_mask):
+                self.kill()
+                                     
                                 
 class ChargeBolt(pygame.sprite.Sprite):
            
@@ -2658,16 +3020,48 @@ class ChargeBolt(pygame.sprite.Sprite):
                 self.last_flip_time = time()
         else:
             self.kill()
-        self.rect = self.image.get_rect(center=self.pos)
+        self.rect.center = self.pos
          
             
-class VaporizingArc(pygame.sprite.Sprite):
+class PowerStone(pygame.sprite.Sprite):
             
-    def __init__(self, image, pos):
+    def __init__(self, power, image, pos, lives_granted, loot_chance):
         super().__init__()
+        self.power = power
         self.image = image
-        self.pos = pygame.math.Vector2(pos)           
+        self.pos = pygame.math.Vector2(pos)
+        self.rect = self.image.get_rect(center=self.pos)
+        self.lives_granted = lives_granted
+        self.loot_chance = loot_chance
+        self.projectile_velocity = pygame.math.Vector2(0, 0)
+        self.project_to_pos = pygame.math.Vector2(0, 0)
+        self.projectile_speed = 350
+        self.explode = False
+        self.static = False
+                              
+    def update(self):
+        if self.explode is True:
+            self.explode_outward()
+            if self.pos.x < 0 or self.pos.x > screen_width or \
+            self.pos.y < 0 or self.pos.y > screen_height:
+                self.kill()
+                
+    def show_to_player(self):
+        screen.blit(self.image, self.rect)
+                
+    def explode_outward(self):
+        self.pos.x += self.projectile_velocity.x * game['Delta Time']
+        self.pos.y += self.projectile_velocity.y * game['Delta Time']
+        self.rect.center = self.pos 
     
+    
+    def set_projectile_velocity(self, pos):
+        distance = pygame.math.Vector2(self.pos).distance_to(pos)
+        x_velocity = self.projectile_speed * (pos[0] - self.pos.x) / distance
+        y_velocity = self.projectile_speed * (pos[1] - self.pos.y) / distance
+        return pygame.math.Vector2((x_velocity, y_velocity))        
+
+                
 
 enemy_types = {'Cruiser': {'Health': 500,        #1
                            'Damage': 50,
@@ -2752,7 +3146,7 @@ enemy_types = {'Cruiser': {'Health': 500,        #1
                 'Healer': {'Health': 10000,      #12
                            'Damage': 0,
                            'Shot Cooldown': 300,
-                           'Range': 500,
+                           'Range': 700,
                            'Speed': 55,
                            'Special': 'Radial Healing',
                            'Shield': True},
@@ -2769,11 +3163,11 @@ enemy_types = {'Cruiser': {'Health': 500,        #1
                            'Damage': 800,
                            'Shot Cooldown': 5,
                            'Range': 500,
-                           'Speed': 20,
+                           'Speed': 25,
                            'Special': 'Shield Destroy',
                            'Shield': True},
                        
-               'Flanker': {'Health': 18000,
+               'Flanker': {'Health': 40000,
                            'Damage': 400,
                            'Shot Cooldown': 5,
                            'Range': 410,
@@ -2858,7 +3252,7 @@ enemy_types = {'Cruiser': {'Health': 500,        #1
                           'Special': 'Tanker Delivery',
                           'Shield': True},
                           
-           'Uni-Bomber': {'Health': 250000,
+           'Uni-Bomber': {'Health': 550000,
                           'Damage': 2500,
                           'Shot Cooldown': 7,
                           'Range': 430,
@@ -2866,16 +3260,16 @@ enemy_types = {'Cruiser': {'Health': 500,        #1
                           'Special': 'Bomb Shot',
                           'Shield': True},
                           
-           'Meteor Launcher': {'Health': 650000,
+           'Missile Launcher': {'Health': 650000,
                                'Damage': 5000,
                                'Shot Cooldown': 15,
                                'Range': 400,
                                'Speed': 50,
-                               'Special': 'Meteor Shot',
+                               'Special': 'Missile Shot',
                                'Shield': True},
                                
            'Blubber Bomber': {'Health': 800000,
-                              'Damage': 750,
+                              'Damage': 7500,
                               'Shot Cooldown': 5,
                               'Range': 440,
                               'Speed': 50,
@@ -2883,18 +3277,18 @@ enemy_types = {'Cruiser': {'Health': 500,        #1
                               'Shield': True},
                               
            'Smart Destroyer': {'Health': 1000000,
-                               'Damage': 1500,
+                               'Damage': 15000,
                                'Shot Cooldown': 5,
                                'Range': 380,
                                'Speed': 80,
                                'Special': 'Turret Paralyzer',
                                'Shield': True},
                                
-           'Ultimate Killer': {'Health': 50000000,
+           'Ultimate Killer': {'Health': 5000000,
                                'Damage': 50000,
-                               'Shot Cooldown': 10,
-                               'Range': 700,
-                               'Speed': 30,
+                               'Shot Cooldown': 5,
+                               'Range': 650,
+                               'Speed': 60,
                                'Special': 'Teleport',
                                'Shield': True}
 }
@@ -2916,60 +3310,61 @@ enemy_boss_types = {'Soaring Fighter': {'Health': 20000,
                                         'Shield': True},
                                         
                         'Doomdefier': {'Health': 75000,
-                                        'Damage': 500,
+                                        'Damage': 5000,
                                         'Shot Cooldown': 2,
                                         'Range': 700,
                                         'Speed': 50,
                                         'Special': 'Drones', # 1/10 damage amd health
-                                        'Defense': 'TBA'},
+                                        'Shield': True},
                                         
                         'Versawing': {'Health': 100000,
-                                        'Damage': 6000,
+                                        'Damage': 7000,
                                         'Shot Cooldown': 2.5,
                                         'Range': 650,
                                         'Speed': 50,
                                         'Special': 'Side Missiles', # 1/10 Damage and health
-                                        'Defense': 'TBA'},
+                                        'Shield': True},
                                         
-                        'Timodifier': {'Health': 125000,
-                                        'Damage': 2500,
-                                        'Shot Cooldown': 4,
-                                        'Range': 500,
-                                        'Speed': 60,
-                                        'Special': 'Slow Down Bullets',
-                                        'Defense': 'TBA'},
+                        'Timodifier': {'Health': 150000,  # Boss will have 4 Turrets queued for launch
+                                        'Damage': 12000,  # each turret will sit as a spawn_orb
+                                        'Shot Cooldown': 4,  # in the 4 spots on the ship
+                                        'Range': 500,     # each turret will launch after boss is in range and spawn every 5 secs
+                                        'Speed': 60,      # each turret will teleport up and down every 2 secs
+                                        'Special': 'Speed Turrets', # each turret will rotate towards
+                                        'Shield': True},  # and fire at base every time it teleports
                                         
-                        'Whoppur': {'Health': 150000,
+                        'Whoppur': {'Health': 300000,
                                         'Damage': 2500,
                                         'Shot Cooldown': 2.5,
                                         'Range': 400,
                                         'Speed': 50,
                                         'Special': 'TBA',
-                                        'Defense': 'Shield'},
+                                        'Shield': True},
                                         
-                        'Godship': {'Health': 200000,
-                                        'Damage': 500,
-                                        'Shot Cooldown': 2.5,
+                        'Godship': {'Health': 500000,
+                                        'Damage': 5000,
+                                        'Shot Cooldown': 3,
                                         'Range': 700,
                                         'Speed': 50,
                                         'Special': 'Gold Laser',
+                                        'Shield': True,
                                         'Defense': 'Laser Immunity'}, # can only be destroyed with special attacks
                                         
-                        'Vulcanizer': {'Health': 300000,
-                                        'Damage': 5000,
-                                        'Shot Cooldown': 2.5,
-                                        'Range': 400,
-                                        'Speed': 50,
-                                        'Special': 'Triple Charge Beam', # 3 Orbs charge up, meet in front middle and shoots out a massive charge
-                                        'Defense': 'TBA'},
-                                        
-                        'Stingeray': {'Health': 500000,
+                        'Vulcanizer': {'Health': 1000000,
                                         'Damage': 20000,
                                         'Shot Cooldown': 2.5,
                                         'Range': 400,
                                         'Speed': 50,
-                                        'Special': 'TBA',
-                                        'Defense': 'TBA'},
+                                        'Special': 'Triple Charge Beam', # 3 Orbs charge up, meet in front middle and shoots out a massive charge
+                                        'Shield': True},
+                                        
+                        'Stingeray': {'Health': 2000000,
+                                        'Damage': 20000,
+                                        'Shot Cooldown': 2.5,
+                                        'Range': 400,
+                                        'Speed': 50,
+                                        'Special': 'Stinger',
+                                        'Shield': True},
                                         
                         'Galactic Destroyer': {'Health': 1000000000,
                                         'Damage': 500000,
@@ -2977,20 +3372,12 @@ enemy_boss_types = {'Soaring Fighter': {'Health': 20000,
                                         'Range': 400,
                                         'Speed': 50,
                                         'Special': 'TBA',
-                                        'Defense': 'TBA'}
+                                        'Shield': True}
 }
 
 enemy_names = np.array([t for t in enemy_types.keys()])
 # Data dicts for level variables 
-
-try:
-    with open('saved_games.txt', 'r') as f:   
-        saved_games = json.loads(f.readline())
-        loaded_games = load_saved_games(saved_games)
-except FileNotFoundError:
-    saved_games = dict()
-    loaded_games = np.array([])
-   
+       
 level = {'Playing': True,
          'Paused': False,
          'Abandoned': False,
@@ -3025,14 +3412,45 @@ game = {'Previous Time': time(),
         'Screen Transition': False,
         'Music': True,
         'Sounds': True,
-        'Load Game': False}
+        'Load Game': False,
+        'Loaded Game': None,
+        'Preview Saved Game': False,
+        'Confirm Delete Game': False,
+        'Preview Level': False,
+        'Upgrading Base': False,
+        'Upgrading Shield': False,
+        'Purchasing Special Attacks': False,
+        'Purchasing Special Defenses': False,
+        'Redeeming Power Stones': False}
         
 
 # Player Stats
 player_stats = {'Space Crystals': 0,
                 'Power Gems': 0,
+                'Lives': 10,
+                'Rank': 'Cadet',
                 'XP': 0}
                 
+player_ranks = {'Cadet': 500,
+                'Trooper': 2000,
+                'Technician':5000,
+                'Specialist': 15000,
+                'Commander': 20000}
+                
+player_collected_power_stones = {'Strength': 0,
+                                 'Recovery': 0,
+                                 'Speed': 0,
+                                 'Depletion': 0,
+                                 'Freeze': 0}
+
+try:
+    with open('saved_games.txt', 'r') as f:   
+        saved_games = json.loads(f.readline())
+        loaded_games = load_saved_games(saved_games)
+except FileNotFoundError:
+    saved_games = dict()
+    loaded_games = np.array([])                
+                                                
 # Stats Menus
 
 # Player's base stats
@@ -3043,7 +3461,7 @@ base_health_stats = {'Health': 5000,
                      'Health Regeneration': 'Inactive'}
 base_starting_stats = base_health_stats.copy()
 base_health_stats_increase_amounts = [500, 1.2, 0.1, 1.1, 'Active']
-base_health_stats_limits = np.array([999999999, 999999999, 0.5, 1000, None])
+base_health_stats_limits = np.array([999999999, 999999999, 0.5, 1000000, None])
                  
 # Player's base Shield stats   
 shield_stats = {'Status': 'Inactive',
@@ -3053,7 +3471,7 @@ shield_stats = {'Status': 'Inactive',
                 'Health Regeneration': 'Inactive'}
 shield_starting_stats = shield_stats.copy()
 shield_stats_increase_amounts = ['Active', 1.2, 0.1, 1.1, 'Active']
-shield_stats_limits = np.array([None, 999999999, 0.5, 1000, 'Active'])
+shield_stats_limits = np.array([None, 999999999, 0.5, 1000000, 'Active'])
        
 # Player's main turret stats
 main_turret_stats = {'Damage': 100,
@@ -3071,28 +3489,26 @@ extra_turret_stats = {'Damage': 100,
                       'Cooldown (secs)': 5,
                       'Critical Hit': 1.5,
                       'Critical Hit Chance %': 5}           
-extra_turret_stats_increase_amounts = [1.15, 1.1, 0.1, 2, 1]
+extra_turret_stats_increase_amounts = [1.15, 1.1, 0.1, 0.1, 1]
 extra_turret_stats_limits = np.array([999999, 100, 0.5, 10, 25])
 
 # Stats for special attacks
 special_attacks_stats = {'Rapid Fire': 0,
-                         'Vaporizers': 0,
-                         'Raining Comets': 0,
+                         'Cluster Shots': 0,
                          'Meteor Shower': 0,
-                         'Cluster Shots': 0}
-special_attacks_starting_stats = special_attacks_stats.copy()
+                         'Raining Comets': 0,
+                         'Vaporizers': 0}
 special_attacks_stats_increase_amounts = [1, 1, 1, 1, 1]
 special_attacks_stats_limits = np.array([1000, 1000, 1000, 1000, 1000])              
  
 # Stats for special defenses                
-special_defenses_stats = {'Shock Absorbers': 0,  # seconds duration
-                          'Poison Antidote': 0,  # num of tiny clusters
-                          'Flares': 0,  # seconds duration
-                          'Deflection': 0,  # seconds duration
-                          'Black Hole': 0}  # seconds duration 
-special_defenses_starting_stats = special_defenses_stats.copy()            
+special_defenses_stats = {'Shock Absorbers': 0,
+                          'Poison Antidote': 0,
+                          'Flares': 0,
+                          'Deflection': 0,
+                          'Magnetic Mine': 0}
 special_defenses_stats_increase_amounts = [1, 1, 1, 1, 1]
-special_defenses_stats_limits = np.array([5, 1000, 5, 5, 5]) 
+special_defenses_stats_limits = np.array([1000, 1000, 1000, 1000, 1000]) 
      
 # Upgrade Menus
 base_health_upgrades = {'Repair': 1000,
@@ -3100,28 +3516,28 @@ base_health_upgrades = {'Repair': 1000,
                         'Regen Cooldown -': 10000,
                         'Regen Amount +': 15000,
                         'Health Regeneration': 50000}                
-base_health_upgrades_increase_amounts = [1.05, 1.08, 1.09, 1.12, 1.0]    
+base_health_upgrades_increase_amounts = [1.05, 1.08, 1.09, 1.07, 1.0]    
                                     
-shield_upgrades_options = {'Activate Shield': 20000,
-                   'Shield Health +': 20000,
-                   'Regen Cooldown -': 10000,
-                   'Regen Amount +': 20000,
-                   'Health Regeneration': 50000}              
-shield_upgrade_increase_amounts = [1.2, 1.15, 1.1, 1.2, 1]
+shield_upgrades_options = {'Activate Shield': 50000,
+                           'Shield Health +': 5000,
+                           'Regen Cooldown -': 10000,
+                           'Regen Amount +': 15000,
+                           'Health Regeneration': 50000}              
+shield_upgrade_increase_amounts = [1, 1.15, 1.1, 1.09, 1]
                          
 main_turret_upgrades = {'Damage +': 1000,
                         'Critical Hit +': 2500,
                         'Critical Hit Chance': 3000,
                         'Special Cooldown': 5000,
                         'Add Turret': 500}                        
-main_turret_upgrade_increase_amounts = [1.25, 1.5, 1.3, 1.15, 2]
+main_turret_upgrade_increase_amounts = [1.2, 1.09, 1.3, 1.1, 2]
                         
 extra_turret_upgrades = {'Damage +': 1000,
                          'Range +': 1250,
                          'Cooldown -': 1500,
                          'Critical Hit +': 5000,
                          'Critical Hit Chance': 10000}                                                             
-extra_turret_upgrades_increase_amounts = [1.2, 1.5, 1.1, 1.2, 1.25]
+extra_turret_upgrades_increase_amounts = [1.2, 1.5, 1.1, 1.07, 1.25]
                          
 special_attacks = {'Rapid Fire': 1000,
                    'Cluster Shot': 2000,                  
@@ -3129,13 +3545,27 @@ special_attacks = {'Rapid Fire': 1000,
                    'Raining Comets': 5000,
                    'Vaporizer': 10000}
 special_attacks_increase_amounts = [1, 1, 1, 1, 1]             
-                               
+
+special_attacks_durations = {'Rapid Fire': 30,
+                             'Cluster Shots': 0,
+                             'Meteor Shower': 20,
+                             'Raining Comets': 10,
+                             'Vaporizers': 0,
+                             'None': 0}
+                                                                                             
 special_defenses = {'Shock Absorber': 1000,
                     'Poison Antidote': 2000,
                     'Flares': 5000,
                     'Deflection': 10000,
-                    'Black Hole': 20000}
+                    'Magnetic Mine': 20000}
 special_defenses_increase_amounts = [1, 1, 1, 1, 1]
+
+special_defenses_durations = {'Shock Absorbers': 30,
+                              'Poison Antidote': 30,
+                              'Flares': 30,
+                              'Deflection': 30,
+                              'Magnetic Mine': 20,
+                              'None': 0}
 
 # Enemy Turret Stats
 enemy_turret_stats = {'Health': 3000,
@@ -3169,10 +3599,10 @@ extra_turret4 = Turret(turret_extra, helper_turret_locations[3], extra_turret_st
 extra_turrets = np.array([extra_turret1, extra_turret2, extra_turret3, extra_turret4])
 
 # Stats Tables
-stats_table_pos = (screen_width - menu_offset, 15)
+stats_table_pos = (screen_width - (menu_offset / 2), screen_height / 2)
 base_stats_table = StatsTable('Health Stats', player_base.stats, base_health_stats_increase_amounts, base_health_stats_limits, stats_table_pos)
 shield_stats_table = StatsTable('Shield Stats', base_shield.stats, shield_stats_increase_amounts, shield_stats_limits, stats_table_pos)
-main_turret_stats_table = StatsTable('Main Turret', base_turret.stats, main_turret_stats_increase_amounts, main_turret_stats_limits, stats_table_pos)
+base_turret_stats_table = StatsTable('Main Turret', base_turret.stats, main_turret_stats_increase_amounts, main_turret_stats_limits, stats_table_pos)
 extra_turret1_stats_table = StatsTable('Turret X1', extra_turret1.stats, extra_turret_stats_increase_amounts, extra_turret_stats_limits, stats_table_pos)
 extra_turret2_stats_table = StatsTable('Turret X2', extra_turret2.stats, extra_turret_stats_increase_amounts, extra_turret_stats_limits, stats_table_pos)
 extra_turret3_stats_table = StatsTable('Turret X3', extra_turret3.stats, extra_turret_stats_increase_amounts, extra_turret_stats_limits, stats_table_pos)
@@ -3181,7 +3611,7 @@ special_attacks_stats_table = StatsTable('Supply', special_attacks_stats.copy(),
 special_defenses_stats_table = StatsTable('Supply', special_defenses_stats.copy(), special_defenses_stats_increase_amounts, special_defenses_stats_limits, stats_table_pos)
 
 # Upgrade Menu Tables
-upgrade_menu_pos = (base_stats_table.rect.left - menu_offset, base_stats_table.rect.top)
+upgrade_menu_pos = (base_stats_table.rect.centerx - menu_offset, screen_height / 2)
 base_upgrades = UpgradeMenu('Base Health', base_health_upgrades.copy(), base_health_upgrades_increase_amounts, upgrade_menu_pos)
 base_turret_upgrades = UpgradeMenu('Main Turret', main_turret_upgrades.copy(), main_turret_upgrade_increase_amounts, upgrade_menu_pos)
 extra_turret1_upgrades = UpgradeMenu('X1 Upgrades', extra_turret_upgrades.copy(), extra_turret_upgrades_increase_amounts, upgrade_menu_pos)
@@ -3195,24 +3625,25 @@ special_defenses_upgrades = UpgradeMenu('Defenses', special_defenses.copy(), spe
 base_group = pygame.sprite.Group(player_base)
 player_bullet_group = pygame.sprite.Group()
 player_defenses_group = pygame.sprite.Group()
-raining_comets_group = pygame.sprite.Group()
+power_stones_group = pygame.sprite.Group()
 
 # Sprite groups for enemy attacks
 enemy_group = pygame.sprite.Group()
+enemy_shields_group = pygame.sprite.Group()
 enemy_bullet_group = pygame.sprite.Group()
-bomb_group = pygame.sprite.Group()
-laser_beam_group = pygame.sprite.Group()
-flares_group = pygame.sprite.Group()
-enemy_missile_group = pygame.sprite.Group()
+enemy_flares_group = pygame.sprite.Group()
 healing_ring_group = pygame.sprite.Group()
-charge_bolts_group = pygame.sprite.Group()
 health_flares_group = pygame.sprite.Group()
+spawn_orb_group = pygame.sprite.Group()
 
 # Game name title
 game_title = NavButton(game_title_label_image, (screen_width / 2, screen_height * 0.35))
 
 # Settings Title
 settings_menu_title = Title(settings_menu_title_image, (screen_width / 2, settings_menu_title_image.get_height()))
+
+# Saved Games Header
+saved_games_title = Feedback('Saved Games', title_font, (screen_width / 2, size_50_font))
 
 # Level Overworld Header
 levels_overworld_title = NavButton(levels_menu_title, (screen_width / 2, base_upgrades.rect.top + 50))
@@ -3238,12 +3669,12 @@ stat_limit_reached_message = Feedback('Upgrade Limit Reached', big_font, (screen
 not_unlocked_yet_message = Feedback('Not Unlocked Yet', big_font, (screen_width / 2, screen_height / 2))
 must_reach_shield_level_message = Feedback('Must Complete Level 25', big_font, (screen_width / 2, screen_height * 0.33))
 must_reach_extra_turret_upgrades_level_message = Feedback('Must Complete Level 35', big_font,  (screen_width / 2, screen_height * 0.33))
-no_saved_games_message = Feedback('No saved Games', big_font, (load_game_button.rect.centerx, load_game_button.rect.bottom + 50))
+no_saved_games_message = Feedback('No Saved Games', big_font, (load_game_button.rect.centerx, load_game_button.rect.bottom + 50))
 must_complete_previous_level_message = Feedback('Must Complete Previous Level', big_font, (screen_width / 2, screen_height / 2))
 
 # Level Mini Menus
-level_completed_menu = MiniMenu(level_over_menu, (screen_width / 2, screen_height + level_over_menu.get_height() / 2), 'Level Completed')
-level_defeated_menu = MiniMenu(level_over_menu, (screen_width / 2, screen_height + level_over_menu.get_height() / 2), 'Level Failed')
+level_completed_menu = MiniMenu(level_over_menu, screen_middle, 'Level Complete')
+level_defeated_menu = MiniMenu(level_over_menu, screen_middle, 'Level Failed')
 
 # Paused Level menu
 paused_level_menu = MiniMenu(level_over_menu, (screen_width / 2, screen_height / 2), 'Game Paused')
@@ -3252,11 +3683,11 @@ paused_level_menu = MiniMenu(level_over_menu, (screen_width / 2, screen_height /
 unpause_game_button = NavButton(resume_game_button_image, (paused_level_menu.rect.centerx, paused_level_menu.rect.centery - 50))
 abandon_game_button = NavButton(exit_game_button_image, (paused_level_menu.rect.centerx, paused_level_menu.rect.centery + 50))
 
-player_money_enlarged_label = Feedback('Space Crystals', upgrades_font, (base_upgrades.rect.x / 2, screen_height * 0.33))
-player_money_enlarged = Feedback(f'{int(player_stats["Space Crystals"])}', upgrades_font, (player_money_enlarged_label.rect.centerx, player_money_enlarged_label.rect.centery + 50))
+player_money_shrunken = Feedback(f'{int(player_stats["Space Crystals"])}', ui_30_font, (base_upgrades.rect.x / 2, screen_height * 0.87))
+player_power_crystals_shrunken = Feedback(f'{player_stats["Power Gems"]}', ui_30_font, (player_money_shrunken.rect.centerx, player_money_shrunken.rect.bottom + size_30_font))
 
-player_power_crystals_label = Feedback('Power Gems', upgrades_font, (base_upgrades.rect.x / 2, screen_height * 0.66))
-player_power_crystals_enlarged = Feedback(f'{player_stats["Power Gems"]}', upgrades_font, (player_power_crystals_label.rect.centerx, player_power_crystals_label.rect.centery + 50))
+player_money_enlarged = Feedback(f'{int(player_stats["Space Crystals"])}', upgrades_font, (base_upgrades.rect.x / 2, screen_height * 0.45))
+player_power_crystals_enlarged = Feedback(f'{player_stats["Power Gems"]}', upgrades_font, (player_money_enlarged.rect.centerx, player_money_enlarged.rect.centery + player_money_enlarged.rect.height + 20))
 
 level_feedback = Feedback(f'Level: {game["Current Level"]}', ui_font, (0, 0))
 player_money = Feedback(f'{player_stats["Space Crystals"]}', ui_font, (92, screen_height * 0.89))
@@ -3275,31 +3706,23 @@ turret_upgrades_button = NavButton(turrets_upgrades_button_image, (screen_width 
 base_turret_upgrades_button = NavButton(main_turret_upgrades_button_image, turret_upgrades_button.rect.center)
 extra_turret_upgrades_button = NavButton(extra_turrets_upgrades_button_image, turret_upgrades_button.rect.center)
 
-#test loc for centering buttons--> (full length - (num of buttons * button width)) / num of spaces = equal button spacing
-extra_turret_button_spacing = base_upgrades.rect.left - (level_overworld_button.get_width() * 4) / 5
-turret_x1_button = Button(level_overworld_button, (base_upgrades.rect.left * 0.2, screen_height - level_overworld_button.get_height()), 'X1', ui_font)
-turret_x2_button = Button(level_overworld_button, (turret_x1_button.rect.centerx + level_overworld_button.get_width() + 20, screen_height - level_overworld_button.get_height()), 'X2', ui_font)
-turret_x3_button = Button(level_overworld_button, (turret_x2_button.rect.centerx + level_overworld_button.get_width() + 20, screen_height - level_overworld_button.get_height()), 'X3', ui_font)
-turret_x4_button = Button(level_overworld_button, (turret_x3_button.rect.centerx + level_overworld_button.get_width() + 20, screen_height - level_overworld_button.get_height()), 'X4', ui_font)
-
-base_upgrades_button = NavButton(base_upgrades_button_image, (turret_upgrades_button.rect.centerx - turret_upgrades_button.rect.width - 20, screen_height / 2))
-base_health_upgrades_button = NavButton(base_health_upgrades_button_image, base_upgrades_button.rect.center)
-shield_upgrades_button = NavButton(shield_upgrades_button_image, base_upgrades_button.rect.center)
-
-extra_upgrades_button = NavButton(extra_upgrades_button_image, (turret_upgrades_button.rect.centerx + turret_upgrades_button.rect.width + 20, screen_height / 2))
-special_attacks_button = NavButton(special_attacks_upgrades_button_image, extra_upgrades_button.rect.center)
-special_defenses_button = NavButton(special_defenses_upgrades_button_image, extra_upgrades_button.rect.center)
+# Buttons for navigating between the different upgrades screens
+base_upgrades_button = NavButton(base_upgrades_button_image, (screen_width * 0.33, screen_height / 2))
+shield_upgrades_button = NavButton(shield_upgrades_button_image, (base_upgrades_button.rect.centerx, base_upgrades_button.rect.centery + base_upgrades_button.rect.height + 30))
+special_attacks_button = NavButton(special_attacks_upgrades_button_image, (screen_width * 0.66, base_upgrades_button.rect.centery))
+special_defenses_button = NavButton(special_defenses_upgrades_button_image, (special_attacks_button.rect.centerx, special_attacks_button.rect.centery + special_attacks_button.rect.height + 30))
 
 # Navigation Buttons for going betweeen different screens
-continue_level_button = Button(level_nav_button, (level_completed_menu.rect.centerx, level_completed_menu.rect.bottom - level_nav_button.get_height() - 5), 'Continue', ui_font)
+continue_level_button = Button(level_nav_button, (level_completed_menu.rect.centerx, level_completed_menu.rect.bottom - level_nav_button.get_height() - 5), 'Continue', ui_20_font)
 level_options_button = NavButton(level_options_button_image, (level_options_button_image.get_width() / 2 + 5, screen_height - level_options_button_image.get_height() / 2 - 5))
 pause_level_button = NavButton(pause_level_button_image, (screen_width - (pause_level_button_image.get_width() / 2) - 5, pause_level_button_image.get_height() / 2 + 5))
-game_speed_button = NavButton(game_speed_button_image, (screen_width - (game_speed_button_image.get_width() / 2) - 5, game_speed_button_image.get_height() / 2 + 5))
+game_speed_button = NavButton(game_speed_button_image, (pause_level_button.rect.centerx - (pause_level_button_image.get_width()) - 5, pause_level_button_image.get_height() / 2 + 5))
 quit_level_button = Button(level_nav_button, (screen_width - (level_nav_button.get_width() / 2) - 5, level_nav_button.get_height() / 2 + 5), 'Back', ui_font)
 
 goto_upgrades_button = NavButton(goto_upgrades_button_image, (screen_width / 2, screen_height - level_nav_button.get_height() / 2 - 10))
 goto_menu_button = NavButton(goto_menu_button_image, (goto_menu_button_image.get_width() / 2 + 10, goto_menu_button_image.get_height() / 2 + 10))
 goto_levels_button = NavButton(goto_levels_button_image, goto_menu_button.rect.center)
+go_back_to_upgrades_button = NavButton(go_back_to_upgrades_button_image, (screen_width * 0.25, go_back_to_upgrades_button_image.get_height() / 2 + 10))
 
 save_and_quit_button = Button(level_nav_button, (continue_level_button.rect.centerx - level_nav_button.get_width() - 10, continue_level_button.rect.centery), 'Quit', ui_font)
 close_button = NavButton(close_button_image, (close_button_image.get_width() / 2 + 10, close_button_image.get_height() / 2 + 10))
@@ -3331,11 +3754,10 @@ special_attacks_container_label = Title(special_attacks_label_abbreviated, (spec
 
 # Special Attacks Buttons
 rapid_fire_button = NavButton(rapid_fire_button_image, (special_attacks_container.rect.left + (rapid_fire_button_image.get_width() / 2 + 25), special_attacks_container.rect.centery))
-meteor_shower_button = NavButton(meteor_shower_button_image, (rapid_fire_button.rect.centerx + rapid_fire_button.rect.width + 5, rapid_fire_button.rect.centery))
-cluster_shot_button = NavButton(cluster_shot_button_image, (meteor_shower_button.rect.centerx + meteor_shower_button.rect.width + 5, meteor_shower_button.rect.centery))
-vaporize_button = NavButton(vaporize_button_image, (cluster_shot_button.rect.centerx + cluster_shot_button.rect.width + 5, cluster_shot_button.rect.centery))
-raining_comets_button = NavButton(raining_comets_button_image, (vaporize_button.rect.centerx + vaporize_button.rect.width + 5, vaporize_button.rect.centery))
-spawn_orb_group = pygame.sprite.Group()
+cluster_shot_button = NavButton(cluster_shot_button_image, (rapid_fire_button.rect.centerx + rapid_fire_button.rect.width + 5, rapid_fire_button.rect.centery))
+meteor_shower_button = NavButton(meteor_shower_button_image, (cluster_shot_button.rect.centerx + cluster_shot_button.rect.width + 5, cluster_shot_button.rect.centery))
+raining_comets_button = NavButton(raining_comets_button_image, (meteor_shower_button.rect.centerx + meteor_shower_button.rect.width + 5, meteor_shower_button.rect.centery))
+vaporize_button = NavButton(vaporize_button_image, (raining_comets_button.rect.centerx + raining_comets_button.rect.width + 5, raining_comets_button.rect.centery))
 
 # Special Defenses Label
 special_defenses_container_label = Title(special_defenses_label_abbreviated, (special_defenses_container.rect.left - special_defenses_label_abbreviated.get_width() / 2, special_defenses_container.rect.centery))
@@ -3343,57 +3765,55 @@ special_defenses_container_label = Title(special_defenses_label_abbreviated, (sp
 # Special Defenses Button
 shock_absorber_button = NavButton(shock_absorber_button_image, (special_defenses_container.rect.left + (shock_absorber_button_image.get_width() / 2 + 25), special_defenses_container.rect.centery))
 poison_antidote_button = NavButton(poison_antidote_button_image, (shock_absorber_button.rect.centerx + shock_absorber_button.rect.width + 5, shock_absorber_button.rect.centery))
-#flares_button = NavButton()
-#deflection_button = NavButton()
-#black_hole_button = NavButton()
+flares_defense_button = NavButton(flares_defense_button_image, (poison_antidote_button.rect.centerx + poison_antidote_button.rect.width + 5, poison_antidote_button.rect.centery))
+deflection_defense_button = NavButton(laser_deflection_button_image, (flares_defense_button.rect.centerx + flares_defense_button.rect.width + 5, flares_defense_button.rect.centery))
+magnetic_mine_button = NavButton(magnetic_mine_button_image, (deflection_defense_button.rect.centerx + deflection_defense_button.rect.width + 5, deflection_defense_button.rect.centery))
+
+red_strength_power_stone = PowerStone('Strength', red_power_stone_image, screen_middle, 1, 75)
+orange_recovery_power_stone = PowerStone('Recovery', orange_power_stone_image, screen_middle, 2, 50)
+yellow_speed_power_stone = PowerStone('Speed', yellow_power_stone_image, screen_middle, 5, 25)
+green_depletion_power_stone = PowerStone('Depletion', green_power_stone_image, screen_middle, 10, 10)
+blue_freeze_power_stone = PowerStone('Freeze', blue_power_stone_image, screen_middle, 15, 5)
 
 # Base and Shield Health bars
 base_and_shield_stats_container = StatsContainer(base_health_container, (base_health_container.get_width() / 2 + 5, screen_height - (base_health_container.get_height() / 2)))
 
+# Preview window for previewing info for a saved game
+saved_game_preview_window = PreviewWindow(upgrade_table, (screen_width / 2, screen_height / 2))
+saved_game_preview_window.previewing_saved_game = True
+close_saved_game_preview_window_button = NavButton(close_button_image, (saved_game_preview_window.rect.left + (saved_game_preview_window.rect.width * 0.9), saved_game_preview_window.rect.top + (saved_game_preview_window.rect.height * 0.055)))
+play_saved_game_button = NavButton(play_button_image, (saved_game_preview_window.rect.centerx, saved_game_preview_window.rect.top + (saved_game_preview_window.rect.height * 0.77)))
+delete_saved_game_button = NavButton(delete_button_image, (saved_game_preview_window.rect.centerx, play_saved_game_button.rect.centery + (play_saved_game_button.rect.height + 10)))
+confirm_delete_saved_game_window = PreviewWindow(level_over_menu, saved_game_preview_window.pos)
+
+# Preview window for previewing info for a level
+level_preview_window = PreviewWindow(level_over_menu, (screen_width / 2, screen_height / 2))
+close_level_preview_window = NavButton(close_button_image, (level_preview_window.rect.left + (level_preview_window.rect.width * 0.9), level_preview_window.rect.top + (level_preview_window.rect.height * 0.1)))
+play_level_button = NavButton(play_button_image, (level_preview_window.rect.centerx, (level_preview_window.rect.top + (level_preview_window.rect.height * 0.87))))
+
 enemy_collisions = pygame.sprite.groupcollide(player_bullet_group, enemy_group, True, False, pygame.sprite.collide_mask)
-
-#Test Enemy
-#tester_enemy = Enemy(enemy_ships[9], (2500, screen_height / 2), enemy_types['Stingumplyer'])
-#enemy_group.add(tester_enemy)
-
-# Test Boss
-#tester_boss = Enemy(enemy_boss_im)ages[3], (2500, screen_height / 2), enemy_boss_types['Versawing'])
-#enemy_group.add(tester_boss)
-
-# Test paralyze Shot
-#test_p_shot = ParalysisShot((300, 200), (800, 200), 100)
-
-# dictionary for dynamic game difficulty
-player_progression_stats = {}
 
 levels = []
 level_x_offset = 0
-button_spacing = (screen_width / 17.5) + (level_buttons[0].get_width() / 2)
+button_spacing = (screen_width / 17.5) + (level_button.get_width() / 2)
 button_y_spacing = screen_height * 0.2361
-level_x_coord = screen_width * 0.1589 - (level_buttons[0].get_width() / 2)
+level_x_coord = screen_width * 0.1589 - (level_button.get_width() / 2)
 level_y_coord = screen_height * 0.27
 
-# Variables for assigning number of enemies in each level
+# Variables for setting up the levels
 num_of_types = 1
-num_of_enemies = 30
+num_of_enemies = 20
 delay = 4
-ntypes = 2
 boss_num = 0
-probabilities = [6, 1, 0, 0, 0, 0,
-                 0, 0, 0, 0, 0, 0, 
-                 0, 0, 0, 0, 0, 0,
-                 0, 0, 0, 0, 0, 0,
-                 0, 0, 0, 0, 0, 0]
-                         
           
-#for i in range(100):
-for i in range(30):
+for i in range(100):
+#for i in range(30):
    
-   l = Level(level_buttons[i], i  + 1, ntypes, enemy_types, (level_x_coord + level_x_offset, level_y_coord), num_of_enemies)
+   l = Level(level_button, i + 1, num_of_types, enemy_types, (level_x_coord + level_x_offset, level_y_coord), num_of_enemies)
    if i == 0:
        l.locked = False
    l.spawn_delay = delay 
-   #l.locked = False
+   l.locked = False
    if (i + 1) % 10 == 0:
        if boss_num < len(enemy_boss_types.keys()):
            l.boss = boss_num
@@ -3401,9 +3821,9 @@ for i in range(30):
    levels.append(l)
    num_of_enemies += 1
    if len(levels) % 3 == 0:
-       ntypes += 1 if ntypes < len(enemy_types) else 0
+       num_of_types += 1 if num_of_types < len(enemy_types) else 0
    if len(levels) % 6 == 0:
-       level_x_coord = screen_width * 0.1589 - (level_buttons[0].get_width() / 2)
+       level_x_coord = screen_width * 0.1589 - (level_button.get_width() / 2)
        level_y_coord += 170
    else:
        level_x_coord += button_spacing + l.rect.width / 2
@@ -3416,6 +3836,24 @@ for i in range(len(levels)):
     levels_locked_status[f'{levels[i].num}'] = levels[i].locked
 status_keys = [k for k in levels_locked_status.keys()]
 level_statuses = levels_locked_status.copy()
+
+def get_selected_game(games_loaded, game):
+    for button in games_loaded:
+        if button.connected_game == game:
+            return button
+
+def delete_saved_game(game, game_button):
+    global saved_games
+    global loaded_games
+    _saved_games = saved_games.copy()
+    _loaded_games = loaded_games.copy()
+    _saved_games.pop(game)
+    _loaded_games.remove(game_button)
+    saved_games = _saved_games.copy()
+    loaded_games = _loaded_games.copy()
+    with open('saved_games.txt', 'w') as f:
+        f.write(json.dumps(saved_games))
+    os.remove(game + '.txt')
 
 def save_game():
     save_date = datetime.datetime.now()
@@ -3441,7 +3879,7 @@ def save_game():
     
     base_stats_table_stats = json.dumps(base_stats_table.dict)
     shield_stats_table_stats = json.dumps(shield_stats_table.dict)
-    main_turret_stats_table_stats = json.dumps(main_turret_stats_table.dict, cls=NumpyEncoder)
+    main_turret_stats_table_stats = json.dumps(base_turret_stats_table.dict, cls=NumpyEncoder)
     extra_turret1_stats_table_stats = json.dumps(extra_turret1_stats_table.dict)
     extra_turret2_stats_table_stats = json.dumps(extra_turret2_stats_table.dict)
     extra_turret3_stats_table_stats = json.dumps(extra_turret3_stats_table.dict)
@@ -3455,17 +3893,22 @@ def save_game():
     special_defenses_upgrades_stats = json.dumps(special_defenses_upgrades.dict)
     special_defense_stats = json.dumps(special_defenses_stats_table.dict)
     
+    collected_stones = json.dumps(player_collected_power_stones)
+    
     if player_base.loaded_saved_game is True:
         saved_file = player_base.loaded_game
     else:
-        saved_file = f'Game {len(saved_games) + 1}.txt'
+        saved_file = save_date.strftime('%m%d%y %H%M%S')
         player_base.loaded_game = saved_file
         player_base.loaded_saved_game = True
-        with open('saved_games.txt', 'w+') as sf:
-            saved_games[f'Game {len(saved_games) + 1}'] = save_date.strftime('%m/%d/%y')
-            sf.write(json.dumps(saved_games))
+    with open('saved_games.txt', 'w+') as sf:
+        if save_date.hour >= 12:
+            saved_games[f'{saved_file}'] = save_date.strftime('%m-%d-%y %I:%M PM')
+        else:
+            saved_games[f'{saved_file}'] = save_date.strftime('%m-%d-%y %I:%M AM')
+        sf.write(json.dumps(saved_games))
     
-    with open(saved_file, 'w') as f:
+    with open(f'{saved_file}.txt', 'w') as f:
         f.write(save_time)
         f.write('\n\n\n')
         f.write(currency_stats)
@@ -3521,6 +3964,8 @@ def save_game():
         f.write(special_defenses_upgrades_stats)
         f.write('\n')
         f.write(special_defense_stats)
+        f.write('\n')
+        f.write(collected_stones)
         
      
 def load_saved_game(file):
@@ -3554,7 +3999,7 @@ def load_saved_game(file):
         # Load in and update the player's objects' stats
         base_stats_table.dict.update(json.loads(lines[18]))
         shield_stats_table.dict.update(json.loads(lines[19]))
-        main_turret_stats_table.dict.update(json.loads(lines[20]))
+        base_turret_stats_table.dict.update(json.loads(lines[20]))
         extra_turret1_stats_table.dict.update(json.loads(lines[21]))
         extra_turret2_stats_table.dict.update(json.loads(lines[22]))
         extra_turret3_stats_table.dict.update(json.loads(lines[23]))
@@ -3562,8 +4007,9 @@ def load_saved_game(file):
         special_attacks_stats_table.dict.update(json.loads(lines[27]))
         special_defenses_stats_table.dict.update(json.loads(lines[29]))
         
+        player_collected_power_stones.update(json.loads(lines[30]))
+        
         levels_locked_status.update(json.loads(lines[25]))
-        #levels = json.loads(lines[25])
         keys = [k for k in levels_locked_status.keys()]
         for i in range(len(levels)):
             levels[i].locked = levels_locked_status[keys[i]]          
@@ -3571,7 +4017,9 @@ def load_saved_game(file):
         # Refresh Player currency
         player_money.update_var(f'{player_stats["Space Crystals"]}')
         player_money_enlarged.update_var(f'{player_stats["Space Crystals"]}')
+        player_money_shrunken.update_var(f'{player_stats["Space Crystals"]}')
         player_power_crystals_enlarged.update_var(f'{player_stats["Power Gems"]}')
+        player_power_crystals_shrunken.update_var(f'{player_stats["Power Gems"]}')
         #player_score.update_var(f'Score: {player_stats["XP"]}')
         
         # Refresh the upgrades text surfaces 
@@ -3587,7 +4035,7 @@ def load_saved_game(file):
         
         # Refresh the stats text surfaces 
         base_stats_table.reset_stats()
-        main_turret_stats_table.reset_stats()
+        base_turret_stats_table.reset_stats()
         shield_stats_table.reset_stats()
         extra_turret1_stats_table.reset_stats()
         extra_turret2_stats_table.reset_stats()
@@ -3595,6 +4043,19 @@ def load_saved_game(file):
         extra_turret4_stats_table.reset_stats()
         special_attacks_stats_table.reset_stats()
         special_defenses_stats_table.reset_stats()
+        
+        # Updating UI Text to show player how many special attacks and defenses they have
+        rapid_fire_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Rapid Fire"]}')
+        cluster_shot_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Cluster Shots"]}')
+        meteor_shower_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Meteor Shower"]}')
+        raining_comets_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Raining Comets"]}')
+        vaporize_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Vaporizers"]}')
+            
+        shock_absorber_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Shock Absorbers"]}')
+        poison_antidote_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Poison Antidote"]}')
+        flares_defense_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Flares"]}')
+        deflection_defense_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Deflection"]}')
+        magnetic_mine_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Magnetic Mine"]}')
         
         if shield_stats_table.dict['Status'] == 'Active':
             base_group.add(base_shield)
@@ -3648,8 +4109,8 @@ def load_new_game():
     shield_stats_table.dict.update(shield_stats)
     shield_stats_table.reset_stats()
                 
-    main_turret_stats_table.dict.update(main_turret_stats)
-    main_turret_stats_table.reset_stats()
+    base_turret_stats_table.dict.update(main_turret_stats)
+    base_turret_stats_table.reset_stats()
                
     extra_turret1_stats_table.dict.update(extra_turret_stats)
     extra_turret1_stats_table.reset_stats()
@@ -3673,10 +4134,14 @@ def load_new_game():
     for i in range(len(levels)):
         levels[i].locked = level_statuses[keys[i]]
     
-    player_stats['Space Crystals'] = 5000
-    player_stats['Power Gems'] = 500
+    player_stats['Space Crystals'] = 50000000000
+    player_stats['Power Gems'] = 500000000
+    player_stats['Rank'] = 'Cadet'
+    player_stats['XP'] = 0
     player_money_enlarged.update_var(f'{player_stats["Space Crystals"]}')
     player_power_crystals_enlarged.update_var(f'{player_stats["Power Gems"]}')
+    player_money_shrunken.update_var(f'{player_stats["Space Crystals"]}')
+    player_power_crystals_shrunken.update_var(f'{player_stats["Power Gems"]}')
     base_shield.stats['Status'] = 'Inactive'
     helper_turret_group.clear()
     player_bullet_group.empty()
@@ -3695,16 +4160,6 @@ def load_new_game():
         pass
             
 
-def apply_upgrades():
-    player_base.stats = base_stats_table.dict
-    base_shield.stats = base_shield.stats
-    base_turret.stats = base_turret.stats
-    extra_turret1.stats = extra_turret1.stats
-    extra_turret2.stats = extra_turret2.stats
-    extra_turret3.stats = extra_turret3.stats
-    extra_turret4.stats = extra_turret4.stats
-
-
 def load_game_selection_menu():
     for event in pygame.event.get():
         
@@ -3712,46 +4167,102 @@ def load_game_selection_menu():
         if goto_menu_button.clicked(event):
             if game['Sounds'] is True:
                 button_clicked_sound.play()
+            game['Preview Saved Game'] = False
+            game['Confirm Delete Game'] = False
             level['Game Select'] = False
             level['On Menu'] = True
             level['Fade'] = True
-        
-        # Player selecting which saved game they want to load   
-        for g in loaded_games:
-            if loaded_games[g].clicked(event):
+            
+        if game['Confirm Delete Game'] is True:
+            # Player is forced into deciding between deleting their game or not
+            if confirm_delete_saved_game_window.preview_info['Confirm Yes'].clicked(event):
                 if game['Sounds'] is True:
                     button_clicked_sound.play()
-                player_base.loaded_game = loaded_games[g].label.text + '.txt'
-                player_base.loaded_saved_game = True
-                load_saved_game(player_base.loaded_game)               
-                level['Fade'] = True
-                level['Overworld'] = True
-                level['Game Select'] = False
-                
-        if len(loaded_games) > 9:
-            if loaded_games[list(loaded_games)[-1]].rect.x > screen_width:
-                if continue_button.clicked(event):
-                    for g in loaded_games:
-                        loaded_games[g].scroll_amount = -screen_width
-                    
+                # Player clicks "Yes" confirming they want to delete the selected game 
+                game_button_to_delete = get_selected_game(loaded_games, player_base.loaded_game)
+                delete_saved_game(game_button_to_delete.connected_game, game_button_to_delete)
+                game['Confirm Delete Game'] = False
+                game['Preview Saved Game'] = False
+                if len(loaded_games) == 0:
+                    # Navigating back to main menu if player has deleted all saved games
+                    level['Game Select'] = False
+                    level['On Menu'] = True
+                    level['Fade'] = True
+            elif confirm_delete_saved_game_window.preview_info['Confirm No'].clicked(event):
+                if game['Sounds'] is True:
+                    button_clicked_sound.play()
+                # Delete Game window disappears
+                # Player still sees their saved game info
+                game['Confirm Delete Game'] = False
+            
+        else:          
+            # Player selecting which saved game they want to load
+            if game['Preview Saved Game'] is False:
+                for g in loaded_games:
+                    if g.clicked(event):
+                        if game['Sounds'] is True:
+                            button_clicked_sound.play()
+                        player_base.loaded_game = g.connected_game 
+                        player_base.loaded_saved_game = True
+                        load_saved_game(player_base.loaded_game + '.txt')               
+                        game['Preview Saved Game'] = True
+                        saved_game_preview_window.get_saved_game_info(g.label.text, g.connected_game, player_stats)
+                        saved_game_preview_window.get_power_stone_collection(player_collected_power_stones)
                         
-            if loaded_games[list(loaded_games)[0]].rect.x < 0:
-                if go_back_button.clicked(event):
-                    for g in loaded_games:
-                        loaded_games[g].scroll_amount = screen_width    
+            elif game['Preview Saved Game'] is True:
+                if close_saved_game_preview_window_button.clicked(event):
+                    if game['Sounds'] is True:
+                            button_clicked_sound.play()
+                    game['Preview Saved Game'] = False
+                    
+                if play_saved_game_button.clicked(event):
+                    if game['Sounds'] is True:
+                            button_clicked_sound.play()
+                    level['Fade'] = True
+                    level['Overworld'] = True
+                    level['Game Select'] = False
+                    
+                if delete_saved_game_button.clicked(event):
+                    if game['Sounds'] is True:
+                            button_clicked_sound.play()
+                    confirm_delete_saved_game_window.set_confirm_delete_game_info()
+                    game['Confirm Delete Game'] = True
+                    #game['Preview Saved Game'] = False
+                        
+            if len(loaded_games) > 9:
+                if loaded_games[-1].rect.x > screen_width:
+                    if continue_button.clicked(event):
+                        for g in loaded_games:
+                            g.scroll_amount = -screen_width
+                        
+                            
+                if loaded_games[0].rect.x < 0:
+                    if go_back_button.clicked(event):
+                        for g in loaded_games:
+                            g.scroll_amount = screen_width    
      
     screen.blit(bg, (0, 0))
     
     for games in loaded_games:
-        loaded_games[games].show()
+        games.show()
         
     goto_menu_button.show()
+    saved_games_title.show_to_player()
+        
+    if game['Preview Saved Game'] is True:
+        saved_game_preview_window.show_preview_info()
+        close_saved_game_preview_window_button.show()
+        play_saved_game_button.show()
+        delete_saved_game_button.show()
+        
+        if game['Confirm Delete Game'] is True:
+            confirm_delete_saved_game_window.show_preview_info()           
     
-    if len(list(loaded_games)) > 9:
-        if loaded_games[list(loaded_games)[-1]].rect.x > screen_width:
+    if len(loaded_games) > 9:
+        if loaded_games[-1].rect.x > screen_width:
             continue_button.show()
             
-        if loaded_games[list(loaded_games)[0]].rect.x < 0:
+        if loaded_games[0].rect.x < 0:
             go_back_button.show()
      
     
@@ -3807,7 +4318,7 @@ def menu():
             level['On Menu'] = False 
             level['Overworld'] = True
             player_base.loaded_saved_game = False
-            player_base.loaded_game = f'Game {len(saved_games) + 1}.txt'
+            #player_base.loaded_game = f'Game {len(saved_games) + 1}'
             load_new_game()
             save_game()
         elif load_game_button.clicked(event):            
@@ -3869,35 +4380,52 @@ def level_overworld():
             level['Overworld'] = False
             level['On Menu'] = True
         
-        for lvl in levels:
-            if lvl.active_button.clicked(event):
-                if lvl.locked is False:
-                    if game['Sounds'] is True:
-                        button_clicked_sound.play()
-                    game['Current Level'] = lvl
-                    level_feedback.update_var(f'Level: {game["Current Level"].num}')
-                    level['Fade'] = True
-                    level['Overworld'] = False
-                    level['Battle'] = True
-                    game['Screen Transition'] = True
-                    game['Current Track'] = gameplay_music2
-                elif lvl.locked is True:
-                    if game['Sounds'] is True:
-                        insufficient_funds_sound.play()
-                    must_complete_previous_level_message.notify_player()
-            if lvl.scroll_amount == 0:
-                
-                if continue_button.clicked(event):
-                    if levels[-1].active_button.rect.x > screen_width:
+        if game['Preview Level'] is False:
+            for lvl in levels:
+                if lvl.active_button.clicked(event):
+                    if lvl.locked is False:
                         if game['Sounds'] is True:
                             button_clicked_sound.play()
-                        lvl.scroll_amount = screen_width
-                
-                if go_back_button.clicked(event):                 
-                    if levels[0].active_button.rect.x < 0:
+                        game['Current Level'] = lvl
+                        game['Preview Level'] = True
+                        game['Current Level'].load(player_base)
+                        level_preview_window.get_level_preview_info(player_stats, lvl)
+                        level_preview_window.get_power_stone_loot(lvl, player_collected_power_stones)
+
+                    elif lvl.locked is True:
                         if game['Sounds'] is True:
-                            button_clicked_sound.play()
-                        lvl.scroll_amount = -screen_width       
+                            insufficient_funds_sound.play()
+                        must_complete_previous_level_message.notify_player()
+        
+        elif game['Preview Level'] is True:
+            if close_level_preview_window.clicked(event):
+                if game['Sounds'] is True:
+                    button_clicked_sound.play()
+                game['Preview Level'] = False
+            
+            if play_level_button.clicked(event):
+                if game['Sounds'] is True:
+                    button_clicked_sound.play()
+                level_feedback.update_var(f'Level: {game["Current Level"].num}')
+                level['Fade'] = True
+                level['Overworld'] = False
+                level['Battle'] = True
+                game['Screen Transition'] = True
+                game['Current Track'] = gameplay_music2
+        
+        if continue_button.clicked(event):
+            if levels[-1].active_button.rect.x > screen_width:
+                if game['Sounds'] is True:
+                    button_clicked_sound.play()
+                for lvl in levels:
+                    lvl.scroll_amount = screen_width
+                
+        if go_back_button.clicked(event):                 
+            if levels[0].active_button.rect.x < 0:
+                if game['Sounds'] is True:
+                    button_clicked_sound.play()
+                for lvl in levels:
+                    lvl.scroll_amount = -screen_width       
     
     screen.blit(bg, (0, 0))
     
@@ -3916,57 +4444,129 @@ def level_overworld():
     goto_upgrades_button.show()
     goto_menu_button.show()
     
+    if game['Preview Level'] is True:
+        level_preview_window.show_preview_info()
+        close_level_preview_window.show()
+        play_level_button.show()
+        
 
 def upgrade_submenu():
     
     for event in pygame.event.get():
-        if close_button.clicked(event):
+            
+        if go_back_to_upgrades_button.clicked(event):
             if game['Sounds'] is True:
                 button_clicked_sound.play()
-            apply_upgrades()
             save_game()
             level['Fade'] = True
             level['Upgrade Submenu'] = False
             level['Upgrading'] = True
+            player_base.selected_for_upgrade = False
+            base_turret.selected_for_upgrade = False
+            extra_turret1.selected_for_upgrade = False
+            extra_turret2.selected_for_upgrade = False
+            extra_turret3.selected_for_upgrade = False
+            extra_turret4.selected_for_upgrade = False
+            rapid_fire_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Rapid Fire"]}')
+            cluster_shot_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Cluster Shots"]}')
+            meteor_shower_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Meteor Shower"]}')
+            raining_comets_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Raining Comets"]}')
+            vaporize_button.remaining_uses.update_var(f'{special_attacks_stats_table.dict["Vaporizers"]}')
             
-        if level['Submenu'] == extra_turret1_upgrades or level['Submenu'] == extra_turret2_upgrades or \
-        level['Submenu'] == extra_turret3_upgrades or level['Submenu'] == extra_turret4_upgrades:
-            # Switching between each individual turret upgrade and stat menus
-            if turret_x1_button.clicked(event):
+            shock_absorber_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Shock Absorbers"]}')
+            poison_antidote_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Poison Antidote"]}')
+            flares_defense_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Flares"]}')
+            deflection_defense_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Deflection"]}')
+            magnetic_mine_button.remaining_uses.update_var(f'{special_defenses_stats_table.dict["Magnetic Mine"]}')
+                                    
+        if game['Upgrading Base'] == True:
+            # Switching between turrets and base upgrades
+            if player_base.clicked(event):
+                player_base.selected_for_upgrade = True
+                base_turret.selected_for_upgrade = False
+                extra_turret1.selected_for_upgrade = False
+                extra_turret2.selected_for_upgrade = False
+                extra_turret3.selected_for_upgrade = False
+                extra_turret4.selected_for_upgrade = False
+                if game['Sounds'] is True:
+                    button_clicked_sound.play()
+                level['Submenu'] = base_upgrades
+                level['Submenu Stats'] = base_stats_table
+            
+            if base_turret.clicked(event):
+                player_base.selected_for_upgrade = False
+                base_turret.selected_for_upgrade = True
+                extra_turret1.selected_for_upgrade = False
+                extra_turret2.selected_for_upgrade = False
+                extra_turret3.selected_for_upgrade = False
+                extra_turret4.selected_for_upgrade = False
+                if game['Sounds'] is True:
+                    button_clicked_sound.play()
+                level['Submenu'] = base_turret_upgrades
+                level['Submenu Stats'] = base_turret_stats_table
+               
+            if extra_turret1.clicked(event):
                 if extra_turret1 not in helper_turret_group:
                     if game['Sounds'] is True:
                         insufficient_funds_sound.play()
                 else:
+                    player_base.selected_for_upgrade = False
+                    base_turret.selected_for_upgrade = False
+                    extra_turret1.selected_for_upgrade = True
+                    extra_turret2.selected_for_upgrade = False
+                    extra_turret3.selected_for_upgrade = False
+                    extra_turret4.selected_for_upgrade = False
                     if game['Sounds'] is True:
                         button_clicked_sound.play()
                     level['Submenu'] = extra_turret1_upgrades
                     level['Submenu Stats'] = extra_turret1_stats_table
-            if turret_x2_button.clicked(event):
+            #if turret_x2_button.clicked(event):
+            if extra_turret2.clicked(event):
                 if extra_turret2 not in helper_turret_group:
                     if game['Sounds'] is True:
                         insufficient_funds_sound.play()
                     turret_not_purchased_message.notify_player()
                 else:
+                    player_base.selected_for_upgrade = False
+                    base_turret.selected_for_upgrade = False
+                    extra_turret1.selected_for_upgrade = False
+                    extra_turret2.selected_for_upgrade = True
+                    extra_turret3.selected_for_upgrade = False
+                    extra_turret4.selected_for_upgrade = False
                     if game['Sounds'] is True:
                         button_clicked_sound.play()
                     level['Submenu'] = extra_turret2_upgrades
                     level['Submenu Stats'] = extra_turret2_stats_table
-            if turret_x3_button.clicked(event):
+            #if turret_x3_button.clicked(event):
+            if extra_turret3.clicked(event):
                 if extra_turret3 not in helper_turret_group:
                     if game['Sounds'] is True:
                         insufficient_funds_sound.play()
                     turret_not_purchased_message.notify_player()
                 else:
+                    player_base.selected_for_upgrade = False
+                    base_turret.selected_for_upgrade = False
+                    extra_turret1.selected_for_upgrade = False
+                    extra_turret2.selected_for_upgrade = False
+                    extra_turret3.selected_for_upgrade = True
+                    extra_turret4.selected_for_upgrade = False
                     if game['Sounds'] is True:
                         button_clicked_sound.play()
                     level['Submenu'] = extra_turret3_upgrades
                     level['Submenu Stats'] = extra_turret3_stats_table
-            if turret_x4_button.clicked(event):
+            #if turret_x4_button.clicked(event):
+            if extra_turret4.clicked(event):
                 if extra_turret4 not in helper_turret_group:
                     if game['Sounds'] is True:
                         insufficient_funds_sound.play()
                     turret_not_purchased_message.notify_player()
                 else:
+                    player_base.selected_for_upgrade = False
+                    base_turret.selected_for_upgrade = False
+                    extra_turret1.selected_for_upgrade = False
+                    extra_turret2.selected_for_upgrade = False
+                    extra_turret3.selected_for_upgrade = False
+                    extra_turret4.selected_for_upgrade = True
                     if game['Sounds'] is True:
                         button_clicked_sound.play()
                     level['Submenu'] = extra_turret4_upgrades
@@ -3994,6 +4594,7 @@ def upgrade_submenu():
                                 player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                 player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                 player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                 level['Submenu'].update_cost(button)
                                 level['Submenu Stats'].update_stat(b)
                                 
@@ -4010,6 +4611,7 @@ def upgrade_submenu():
                                         player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                         player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                         player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                        player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                         level['Submenu'].update_cost(button)
                                         level['Submenu Stats'].update_stat(b)
                                         base_stats_table.dict['Health'] = base_stats_table.dict['Max Health']
@@ -4020,6 +4622,7 @@ def upgrade_submenu():
                                         player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                         player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                         player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                        player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                         level['Submenu'].update_cost(button)
                                         level['Submenu Stats'].update_stat(b)
                                         #update health to match Max health
@@ -4038,6 +4641,7 @@ def upgrade_submenu():
                                 player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                 player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                 player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                 level['Submenu'].update_cost(button)
                                 level['Submenu Stats'].update_stat(b)
                         else:
@@ -4051,6 +4655,7 @@ def upgrade_submenu():
                                 player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                 player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                 player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                 level['Submenu'].update_cost(button)
                                 level['Submenu Stats'].update_stat(b)
                     
@@ -4071,6 +4676,7 @@ def upgrade_submenu():
                                 player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                 player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                 player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                 level['Submenu'].update_cost(button)
                                 level['Submenu Stats'].update_stat(b)
                                 base_shield.health = shield_stats_table.dict['Max Health']
@@ -4093,6 +4699,7 @@ def upgrade_submenu():
                                     player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                     player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                     player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                    player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                     level['Submenu'].update_cost(button)
                                     level['Submenu Stats'].update_stat(b)
                                     
@@ -4108,6 +4715,7 @@ def upgrade_submenu():
                                         player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                         player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                         player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                        player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                         level['Submenu'].update_cost(button)
                                         level['Submenu Stats'].update_stat(b)
                                         base_shield.health = shield_stats_table.dict['Max Health']
@@ -4118,6 +4726,7 @@ def upgrade_submenu():
                                         player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                         player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                         player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                        player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                         level['Submenu'].update_cost(button)
                                         level['Submenu Stats'].update_stat(b)
                                     
@@ -4133,6 +4742,7 @@ def upgrade_submenu():
                                     player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                     player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                     player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                    player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                     level['Submenu'].update_cost(button)
                                     level['Submenu Stats'].update_stat(b)
                         
@@ -4152,6 +4762,7 @@ def upgrade_submenu():
                                         player_stats['Power Gems'] -= int(level['Submenu'].get_cost(button))
                                         #player_power_crystals.update_var(f'${int(player_stats["Space Crystals"])}')
                                         player_power_crystals_enlarged.update_var(f'{int(player_stats["Power Gems"])}')
+                                        player_power_crystals_shrunken.update_var(f'{int(player_stats["Power Gems"])}')
                                         level['Submenu'].update_cost(button)
                                         level['Submenu Stats'].update_stat(b)
                                     else:
@@ -4175,6 +4786,7 @@ def upgrade_submenu():
                                 player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                                 player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                                 player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                                player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                                 level['Submenu'].update_cost(button)
                                 level['Submenu Stats'].update_stat(b)
                     
@@ -4187,6 +4799,7 @@ def upgrade_submenu():
                             player_stats['Power Gems'] -= int(level['Submenu'].get_cost(button))
                             #player_power_crystals.update_var(f'${int(player_stats["Space Crystals"])}')
                             player_power_crystals_enlarged.update_var(f'{int(player_stats["Power Gems"])}')
+                            player_power_crystals_shrunken.update_var(f'{int(player_stats["Power Gems"])}')
                             level['Submenu'].update_cost(button)
                             level['Submenu Stats'].update_stat(b)
                         else:
@@ -4206,6 +4819,7 @@ def upgrade_submenu():
                             player_stats['Space Crystals'] -= int(level['Submenu'].get_cost(button))
                             player_money.update_var(f'{int(player_stats["Space Crystals"])}')
                             player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                            player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
                             level['Submenu'].update_cost(button)
                             level['Submenu Stats'].update_stat(b)
                     
@@ -4217,13 +4831,6 @@ def upgrade_submenu():
                 
     
     screen.blit(bg, (0, 0))
-    
-    player_money_enlarged.show_to_player()
-    screen.blit(power_crystal, (player_money_enlarged.rect.x - 40, player_money_enlarged.rect.top))
-    player_money_enlarged_label.show_to_player()
-    player_power_crystals_enlarged.show_to_player()
-    screen.blit(power_gem_image, (player_power_crystals_enlarged.rect.x - 40, player_power_crystals_enlarged.rect.top))
-    player_power_crystals_label.show_to_player()
     
     level['Submenu'].show_table()
     level['Submenu'].header.show_to_player()
@@ -4247,12 +4854,23 @@ def upgrade_submenu():
         else:
             screen.blit(power_crystal, (button.rect.x - 40, button.rect.top + 15))
     
-    if level['Submenu'] == extra_turret1_upgrades or level['Submenu'] == extra_turret2_upgrades or \
-    level['Submenu'] == extra_turret3_upgrades or level['Submenu'] == extra_turret4_upgrades:
-        turret_x1_button.show()
-        turret_x2_button.show()
-        turret_x3_button.show()
-        turret_x4_button.show()
+    if game['Upgrading Base'] is True:
+        player_base.show()
+        base_turret.draw_for_upgrades()
+        for helper in helper_turret_group:
+            helper.draw_for_upgrades()
+    
+        player_money_shrunken.show_to_player()
+        screen.blit(power_crystal, (player_money_shrunken.rect.x - 40, player_money_shrunken.rect.top))
+        player_power_crystals_shrunken.show_to_player()
+        screen.blit(power_gem_image, (player_power_crystals_shrunken.rect.x - 40, player_power_crystals_shrunken.rect.top))    
+    else:
+        player_money_enlarged.show_to_player()
+        screen.blit(power_crystal, (player_money_enlarged.rect.x - 40, player_money_enlarged.rect.top))
+        player_power_crystals_enlarged.show_to_player()
+        screen.blit(power_gem_image, (player_power_crystals_enlarged.rect.x - 40, player_power_crystals_enlarged.rect.top))    
+                
+    go_back_to_upgrades_button.show()
     
     not_enough_money_message.show_notification()
     stat_limit_reached_message.show_notification()
@@ -4264,202 +4882,134 @@ def upgrade_submenu():
     extra_turret_limit_reached_message.show_notification()
     turret_not_purchased_message.show_notification()
     
-    close_button.show()
 
 def upgrade_menu():
     
-    if True:
-    
-        for event in pygame.event.get():
-            # Exiting the upgrade root menu
-                if goto_levels_button.clicked(event):
-                    if game['Sounds'] is True:
-                        button_clicked_sound.play()
-                    level['Upgrading'] = False
-                    level['Overworld'] = True
-                    level['Fade'] = True
-                    base_upgrades_button.show_submenu = False
-                    turret_upgrades_button.show_submenu = False
-                    extra_upgrades_button.show_submenu = False              
-                    
-                    
-                # Base Upgrades
-                if base_health_upgrades_button.is_offsety():
-                    if base_health_upgrades_button.clicked(event):
-                        if game['Sounds'] is True:   
-                            button_clicked_sound.play()
-                        level['Fade'] = True
-                        level['Upgrading'] = False
-                        level['Upgrade Submenu'] = True
-                        level['Upgrade Item'] = player_base
-                        level['Submenu'] = base_upgrades
-                        level['Submenu Stats'] = base_stats_table
-                        base_stats_table.stats[0].update_var(f'{int(player_base.stats["Health"])}')
-                        
-                # Shield Upgrades
-                if shield_upgrades_button.is_offsety():
-                    if shield_upgrades_button.clicked(event):
-                        if game['Sounds'] is True:
-                            button_clicked_sound.play()
-                        level['Fade'] = True
-                        level['Upgrading'] = False
-                        level['Upgrade Submenu'] = True
-                        level['Submenu'] = shield_upgrades
-                        level['Submenu Stats'] = shield_stats_table
-                        
-                # Main Turret Upgrades
-                if base_turret_upgrades_button.is_offsety():
-                    if base_turret_upgrades_button.clicked(event):
-                        if game['Sounds'] is True:
-                            button_clicked_sound.play()
-                        level['Fade'] = True
-                        level['Upgrading'] = False
-                        level['Upgrade Submenu'] = True
-                        level['Submenu'] = base_turret_upgrades
-                        level['Submenu Stats'] = main_turret_stats_table
-                        
-                # Extra Turret Upgrades
-                if extra_turret_upgrades_button.is_offsety():
-                    if extra_turret_upgrades_button.rect.colliderect(base_turret_upgrades_button.rect) is False:
-                        if extra_turret_upgrades_button.clicked(event):
-                            # Player can access individual extra turret upgrades
-                            if extra_turret1 not in helper_turret_group:
-                                if game['Sounds'] is True:
-                                    insufficient_funds_sound.play()
-                                no_turrets_purchased_message.notify_player()
-                            else:
-                                if game['Sounds'] is True:
-                                    button_clicked_sound.play()
-                                #add in options to choose from which Turret to upgrade
-                                level['Fade'] = True
-                                level['Upgrading'] = False
-                                level['Upgrade Submenu'] = True
-                                level['Submenu'] = extra_turret1_upgrades
-                                level['Submenu Stats'] = extra_turret1_stats_table
-                        
-                # Special Attacks Upgrades
-                if special_attacks_button.is_offsety():
-                    if special_attacks_button.clicked(event):
-                        if game['Sounds'] is True:
-                            button_clicked_sound.play()
-                        level['Fade'] = True
-                        level['Upgrading'] = False
-                        level['Upgrade Submenu'] = True
-                        level['Submenu'] = special_attacks_upgrades
-                        level['Submenu Stats'] = special_attacks_stats_table
-                        
-                if special_defenses_button.is_offsety():
-                    if special_defenses_button.clicked(event):
-                        if game['Sounds'] is True:
-                            button_clicked_sound.play()
-                        level['Fade'] = True
-                        level['Upgrading'] = False
-                        level['Upgrade Submenu'] = True
-                        level['Submenu'] = special_defenses_upgrades
-                        level['Submenu Stats'] = special_defenses_stats_table      
-                    
-                if base_upgrades_button.clicked(event):
-                    if game['Sounds'] is True:
-                        button_clicked_sound.play()
-                    turret_upgrades_button.show_submenu = False
-                    extra_upgrades_button.show_submenu = False
-                    base_upgrades_button.show_submenu = True if base_upgrades_button.show_submenu is False else False  
-                    
-                elif turret_upgrades_button.clicked(event):
-                    if game['Sounds'] is True:
-                        button_clicked_sound.play()
-                    base_upgrades_button.show_submenu = False
-                    extra_upgrades_button.show_submenu = False
-                    turret_upgrades_button.show_submenu = True if turret_upgrades_button.show_submenu is False else False
-                                   
-                elif extra_upgrades_button.clicked(event):
-                    if game['Sounds'] is True:
-                        button_clicked_sound.play()
-                    base_upgrades_button.show_submenu = False
-                    turret_upgrades_button.show_submenu = False
-                    extra_upgrades_button.show_submenu = True if extra_upgrades_button.show_submenu is False else False
+    for event in pygame.event.get():
+        # Exiting the upgrade root menu
+        if goto_levels_button.clicked(event):
+            if game['Sounds'] is True:
+                button_clicked_sound.play()
+            level['Upgrading'] = False
+            level['Overworld'] = True
+            level['Fade'] = True
+            
+        # Base and Turrets Upgrades
+        if base_upgrades_button.clicked(event):
+            if game['Sounds'] is True:   
+                button_clicked_sound.play()
+            player_base.selected_for_upgrade = True
+            game['Upgrading Shield'] = False
+            game['Upgrading Base'] = True
+            game['Purchasing Special Attacks'] = False
+            game['Purchasing Special Defenses'] = False
+            level['Fade'] = True
+            level['Upgrading'] = False
+            level['Upgrade Submenu'] = True
+            level['Upgrade Item'] = player_base
+            level['Submenu'] = base_upgrades
+            level['Submenu Stats'] = base_stats_table
+            base_stats_table.stats[0].update_var(f'{int(player_base.stats["Health"])}')
                 
-        # Upgrades screen
-        screen.blit(bg, (0, 0))
+        # Shield Upgrades
+        if shield_upgrades_button.clicked(event):
+            game['Upgrading Shield'] = True
+            game['Upgrading Base'] = False
+            game['Purchasing Special Attacks'] = False
+            game['Purchasing Special Defenses'] = False
+            if game['Sounds'] is True:
+                button_clicked_sound.play()
+            level['Fade'] = True
+            level['Upgrading'] = False
+            level['Upgrade Submenu'] = True
+            level['Submenu'] = shield_upgrades
+            level['Submenu Stats'] = shield_stats_table
+                
+        # Special Attacks Upgrades
+        if special_attacks_button.clicked(event):
+            game['Upgrading Shield'] = False
+            game['Upgrading Base'] = False
+            game['Purchasing Special Attacks'] = True
+            game['Purchasing Special Defenses'] = False
+            if game['Sounds'] is True:
+                button_clicked_sound.play()
+            level['Fade'] = True
+            level['Upgrading'] = False
+            level['Upgrade Submenu'] = True
+            level['Submenu'] = special_attacks_upgrades
+            level['Submenu Stats'] = special_attacks_stats_table
+                
+        if special_defenses_button.clicked(event):
+            game['Upgrading Shield'] = False
+            game['Upgrading Base'] = False
+            game['Purchasing Special Attacks'] = False
+            game['Purchasing Special Defenses'] = True
+            if game['Sounds'] is True:
+                button_clicked_sound.play()
+            level['Fade'] = True
+            level['Upgrading'] = False
+            level['Upgrade Submenu'] = True
+            level['Submenu'] = special_defenses_upgrades
+            level['Submenu Stats'] = special_defenses_stats_table      
+            
+            
+    # Upgrades Main screen
+    screen.blit(bg, (0, 0))
+
+    # Upgrades title
+    upgrades_menu_title.show_to_player()
     
-        # Upgrades title
-        upgrades_menu_title.show_to_player()
-        
-        # Upgrades toggle buttons
-        if shield_upgrades_button.is_offsety():
-            shield_upgrades_button.show()
-            
-        if base_health_upgrades_button.is_offsety():
-            base_health_upgrades_button.show()
-            
-        if extra_turret_upgrades_button.is_offsety():
-            extra_turret_upgrades_button.show()
-           
-        if base_turret_upgrades_button.is_offsety():
-            base_turret_upgrades_button.show()
-            
-        if special_defenses_button.is_offsety():
-            special_defenses_button.show()
-            
-        if special_attacks_button.is_offsety():
-            special_attacks_button.show()
-        
-        base_upgrades_button.show()
-        turret_upgrades_button.show()
-        extra_upgrades_button.show()
-        goto_levels_button.show()
-        
-        must_reach_shield_level_message.show_notification()
-        must_reach_extra_turret_upgrades_level_message.show_notification()
-        no_turrets_purchased_message.show_notification()
-        
-        if base_upgrades_button.show_submenu is True:
-            base_health_upgrades_button.slide_to((base_upgrades_button.rect.centerx, base_upgrades_button.rect.centery + base_upgrades_button.rect.height + 20), 12)
-            shield_upgrades_button.slide_to((base_upgrades_button.rect.centerx, base_health_upgrades_button.rect.centery + base_health_upgrades_button.rect.height + 20), 12)
-        else:
-            base_health_upgrades_button.slide_to_origin(12)
-            shield_upgrades_button.slide_to_origin(12)
-            
-        if turret_upgrades_button.show_submenu is True:
-            base_turret_upgrades_button.slide_to((turret_upgrades_button.rect.centerx, turret_upgrades_button.rect.centery + turret_upgrades_button.rect.height + 20), 12)
-            extra_turret_upgrades_button.slide_to((base_turret_upgrades_button.rect.centerx, base_turret_upgrades_button.rect.centery + base_turret_upgrades_button.rect.height + 20), 12)
-        else:
-            base_turret_upgrades_button.slide_to_origin(12)
-            extra_turret_upgrades_button.slide_to_origin(12)
-      
-        if extra_upgrades_button.show_submenu is True:
-            special_attacks_button.slide_to((extra_upgrades_button.rect.centerx, extra_upgrades_button.rect.centery + extra_upgrades_button.rect.height + 20), 12)
-            special_defenses_button.slide_to((extra_upgrades_button.rect.centerx, special_attacks_button.rect.centery + special_attacks_button.rect.height + 20), 12)
-        else:
-            special_attacks_button.slide_to_origin(12)
-            special_defenses_button.slide_to_origin(12)
-            
+    # Upgrades buttons
+    shield_upgrades_button.show()
+    base_upgrades_button.show()    
+    special_defenses_button.show()
+    special_attacks_button.show()
+    
+    # NavButton to go back to the levels overworld screen
+    goto_levels_button.show()
+                  
     
 def main_play():
     
-    if level['Paused'] is False:
+    if True:
          
         for event in pygame.event.get():
              
             # Adjusting the current level speed
             # REMOVE BEFORE FINAL DISTRIBUTION TO TESTERS
-            #if game_speed_button.clicked(event):
-#                if game['Sounds'] is True:
-#                    button_clicked_sound.play()
-#                level['Button Clicked'] = True
-#                if level['Speed'] == 1:
-#                    level['Speed'] = 1.5
-#                    game['Current Level'].spawn_delay = 2
-#                elif level['Speed'] == 1.5:
-#                    level['Speed'] = 2
-#                    game['Current Level'].spawn_delay = 1
-#                elif level['Speed'] == 2:
-#                    level['Speed'] = 1
-#                    game['Current Level'].spawn_delay = 4
-
+            if game_speed_button.clicked(event):
+                if game['Sounds'] is True:
+                    button_clicked_sound.play()
+                level['Button Clicked'] = True
+                if level['Speed'] == 1:
+                    level['Speed'] = 2
+                    #game['Current Level'].spawn_delay = 2
+                elif level['Speed'] == 2:
+                    level['Speed'] = 4
+                    #game['Current Level'].spawn_delay = 1
+                elif level['Speed'] == 4:
+                    level['Speed'] = 1
+                    #game['Current Level'].spawn_delay = 4            
+             
             # Pausing the current level
             if pause_level_button.clicked(event):
                 level['Paused'] = True
+                
+            if level['Paused'] is True:
+                if unpause_game_button.clicked(event):
+                    level['Paused'] = False
+                    
+                if abandon_game_button.clicked(event):
+                    level['Abandoned'] = True
+                    level['Button Clicked']
+                    if game['Sounds'] is True:
+                        button_clicked_sound.play()
+                    level['Fade'] = True
+                    level['Overworld'] = True
+                    level['Battle'] = False
+                    #level['Paused'] = False
+                    game['Screen Transition'] = True
+                    game['Current Track'] = starting_music
                 
             # Level completed event handling
             if game['Current Level'].completed is True:
@@ -4497,179 +5047,193 @@ def main_play():
                     
             if player_base.stats['Health'] > 0:           
                     
-                if rapid_fire_button.clicked(event):
-                    level['Button Clicked'] = True
-                    if player_base.special_attack_used is False:
-                        player_base.special_attack_used = True
-                        player_base.special_attack_start_time = time()
-                        if base_turret.special_in_use is False:
-                            base_turret.special_in_use = True
-                            base_turret.special_start_time = time()
-                            base_turret.special = 'Rapid Fire'
-                            player_base.rapid_fire_delay = 0.1
-                            #activate special timer countdown
-                    
-                if meteor_shower_button.clicked(event):
-                    level['Button Clicked'] = True
-                    if player_base.special_attack_used is False:
-                        if special_attacks_stats_table.dict['Meteor Shower'] > 0:
-                            player_base.meteor_shower(meteor_group)
-                            player_base.special_attack_used = True
-                            player_base.special_attack_start_time = time()
-                            special_attacks_stats_table.dict['Meteor Shower'] -= 1
-                            special_attacks_stats_table.reset_stats()
-                                      
-                if cluster_shot_button.clicked(event):
-                    level['Button Clicked'] = True
-                    player_base.special_attack_used = True
-                    player_base.special_attack_start_time = time()
-                    if special_attacks_stats_table.dict['Cluster Shots'] > 0:
-                        base_turret.special = 'Cluster'
-                        base_turret.special_in_use = True
-                        special_attacks_stats_table.dict['Cluster Shots'] -= 1
-                    
-                if vaporize_button.clicked(event):
-                    level['Button Clicked'] = True
-                    if special_attacks_stats_table.dict['Vaporizers'] > 0:
-                        player_base.vaporize_enemies(enemy_group)
-                        player_base.special_attack_used = True
-                        player_base.special_attack_start_time = time()
-                        enemies_vaporized_sound.play()
-                        special_attacks_stats_table.dict['Vaporizers'] -= 1
-                    
-                if raining_comets_button.clicked(event):
-                    level['Button Clicked'] = True
-                    if special_attacks_stats_table.dict['Raining Comets'] > 0:
-                        player_base.special_attack_start_time = time()
-                        player_base.raining_comets_start_time = time()
-                        player_base.special_attack_in_use = 'Raining Comets'
-                        player_base.special_attack_used = True
-                        special_attacks_stats_table.dict['Raining Comets'] -= 1
-                        
-                if shock_absorber_button.clicked(event):
-                    level['Button Clicked'] = True
-                    if special_defenses_stats_table.dict['Shock Absorbers'] > 0:
-                        player_base.special_defense_start_time = time()
-                        player_base.special_defense_used = True
-                        player_base.absorb_electric_shock = True
-                        special_defenses_stats_table.dict['Shock Absorbers'] -= 1
-                        
-                if poison_antidote_button.clicked(event):
-                    level['Button Clicked'] = True
-                    if special_defenses_stats_table.dict['Poison Antidote'] > 0:
-                        player_base.special_defense_start_time = time()
-                        player_base.special_defense_used = True
-                        player_base.poison_antidote_applied = True
-                        special_defenses_stats_table.dict['Poison Antidote'] -= 1
-                                    
+                if player_base.special_attack_used is False:
+                    if time() - player_base.special_attack_start_time >= base_turret.stats['Special Cooldown']:
+                        # Player using a special attack
+                        if rapid_fire_button.clicked(event):
+                            if base_turret.special_in_use is False:
+                                player_base.special_attack_used = True
+                                player_base.special_attack_start_time = time()
+                                player_base.special_attack_in_use = 'Rapid Fire'
+                                player_base.rapid_fire_delay = 0.1
+                                #activate special timer countdown
+                            
+                        if cluster_shot_button.clicked(event):
+                            if special_attacks_stats_table.dict['Cluster Shots'] > 0:
+                                player_base.special_attack_in_use = 'Cluster Shots'
+                                #player_base.special_attack_used = True
+                                special_attacks_stats_table.dict['Cluster Shots'] -= 1
+                            
+                        if meteor_shower_button.clicked(event):
+                            if player_base.special_attack_used is False:
+                                if special_attacks_stats_table.dict['Meteor Shower'] > 0:
+                                    player_base.meteor_shower()
+                                    player_base.special_attack_used = True
+                                    player_base.special_attack_start_time = time()
+                                    player_base.special_attack_in_use = 'Meteor Shower'
+                                    special_attacks_stats_table.dict['Meteor Shower'] -= 1
+                                    special_attacks_stats_table.reset_stats()
+                            
+                        if raining_comets_button.clicked(event):
+                            if special_attacks_stats_table.dict['Raining Comets'] > 0:
+                                player_base.special_attack_start_time = time()
+                                player_base.raining_comets_start_time = time()
+                                player_base.special_attack_in_use = 'Raining Comets'
+                                player_base.special_attack_used = True
+                                special_attacks_stats_table.dict['Raining Comets'] -= 1
+                            
+                        if vaporize_button.clicked(event):
+                            if special_attacks_stats_table.dict['Vaporizers'] > 0:
+                                player_base.vaporize_enemies(enemy_group)
+                                enemy_bullet_group.empty()
+                                player_base.special_attack_used = True
+                                player_base.special_attack_start_time = time()
+                                if game['Sounds'] is True:
+                                    enemies_vaporized_sound.play()
+                                special_attacks_stats_table.dict['Vaporizers'] -= 1
+    
+                if player_base.special_defense_used is False:
+                    if time() - player_base.special_defense_start_time >= base_turret.stats['Special Cooldown']:
+                        # Player can use a special defense
+                        if shock_absorber_button.clicked(event):
+                            if special_defenses_stats_table.dict['Shock Absorbers'] > 0:
+                                player_base.special_defense_start_time = time()
+                                player_base.special_defense_used = True
+                                player_base.absorb_electric_shock = True
+                                player_base.special_defense_in_use = 'Shock Absorbers'
+                                special_defenses_stats_table.dict['Shock Absorbers'] -= 1
+                                
+                        if poison_antidote_button.clicked(event):
+                            if special_defenses_stats_table.dict['Poison Antidote'] > 0:
+                                player_base.special_defense_start_time = time()
+                                player_base.special_defense_used = True
+                                player_base.poison_antidote_applied = True
+                                player_base.special_defense_in_use = 'Poison Antidote'
+                                special_defenses_stats_table.dict['Poison Antidote'] -= 1
+                                
+                        if flares_defense_button.clicked(event):
+                            if special_defenses_stats_table.dict['Flares'] > 0:
+                                player_base.special_defense_start_time = time()
+                                player_base.special_defense_used = True
+                                player_base.special_defense_in_use = 'Flares'
+                                special_defenses_stats_table.dict['Flares'] -= 1
+                                
+                        if deflection_defense_button.clicked(event):
+                            if special_defenses_stats_table.dict['Deflection'] > 0:
+                                player_base.special_defense_start_time = time()
+                                player_base.special_defense_used = True
+                                player_base.special_defense_in_use = 'Deflection'
+                                special_defenses_stats_table.dict['Deflection'] -= 1
+                            
+                                
+                        if magnetic_mine_button.clicked(event):
+                            if special_defenses_stats_table.dict['Magnetic Mine'] > 0:
+                                player_base.special_defense_start_time = time()
+                                player_base.special_defense_used = True
+                                player_base.special_defense_in_use = 'Magnetic Mine'
+                                player_defenses_group.add(MagneticMine(magnetic_mine_image, (screen_width * 0.7, screen_height / 2)))
+                                special_defenses_stats_table.dict['Magnetic Mine'] -= 1
+                                        
             # Player firing main turret
             if level['Button Clicked'] is False:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if player_base.stats['Health'] > 0:
-                        if player_base.special_attack_used is True and base_turret.special == 'Cluster':
+                        if player_base.special_attack_in_use == 'Cluster Shots':
                             player_base.special_attack_start_time = time()
                             player_base.cluster_shot(player_bullet_group)
-                            base_turret.special = None                
+                            player_base.special_attack_used = True
                         else:
                             base_turret.shoot(player_bullet_group)
-                            #player_base.spray_bullets_from_edge()
                             game['Current Level'].total_shots_taken += 1
-                            
-        # Tracking timing for special attacks being used
-        if player_base.special_attack_used is True:
-            if time() - player_base.special_attack_start_time > base_turret.stats['Special Cooldown']:
-                player_base.special_attack_used = False
-                
-        # Tracking timing for special defenses being used
-        if player_base.special_defense_used is True:
-            if time() - player_base.special_defense_start_time > player_base.special_defense_duration:
-                player_base.special_defense_used = False
-                player_base.absorb_electric_shock = False
-                player_base.poison_antidote_applied = False
-                        
-        # Player using Rapid Fire special attack
+           
+        # Player holding down the mouse button for repetitive shooting
         if pygame.mouse.get_pressed()[0] is True and level['Button Clicked'] is False:
-            if time() - base_turret.special_start_time <= 30:
-                if time() - base_turret.last_shot_time >= player_base.rapid_fire_delay:
-                    base_turret.shoot(player_bullet_group)
-            else:
-                if time() - base_turret.last_shot_time >= player_base.rapid_fire_delay:
-                    base_turret.shoot(player_bullet_group)
-               
-        # Raining comets special attack until it has reached its full duration
+            if time() - base_turret.last_shot_time >= player_base.rapid_fire_delay:
+                base_turret.shoot(player_bullet_group)
+
+        player_base.handle_special_attack_timer(base_turret.stats['Special Cooldown'], special_attacks_durations[player_base.special_attack_in_use])
+        player_base.handle_special_defense_timer(base_turret.stats['Special Cooldown'], special_defenses_durations[player_base.special_defense_in_use])
+                              
         if player_base.special_attack_used is True:
             if player_base.special_attack_in_use == 'Raining Comets':
-                player_base.rain_comets(raining_comets_group)       
+                player_base.rain_comets()
+            elif player_base.special_attack_in_use == 'Meteor Shower':
+                player_base.meteor_shower()       
                
-        # Rapid Fire special attack being disabled
-        if base_turret.special_in_use is True and base_turret.special == 'Rapid Fire':
-            if time() - base_turret.special_start_time >= 30:
-               base_turret.special_in_use = False
-               base_turret.special = None
-               player_base.rapid_fire_delay = 1
+        # Player using Flares Special Defense
+        if player_base.special_defense_used is True:
+            if player_base.special_defense_in_use == 'Flares':
+                player_base.deploy_defense_flares()
                
         if pygame.mouse.get_pressed()[0] is False:
             level['Button Clicked'] = False
                 
-        # Waiting 3 seconds before enemies start spawning          
-        if time() - game['Current Level'].start_time > 3:
+        # Waiting 4 seconds before enemies start spawning          
+        if time() - game['Current Level'].start_time > 4:
             if len(enemy_group) < 20 and player_base.stats['Health'] > 0:
                 # Spawn enemy ships until all the enemies have been spawned
-                if time() - level['Spawn Time'] >= game['Current Level'].spawn_delay:
-                    game['Current Level'].spawn_enemy()
-                    level['Spawn Time'] = time()           
+                if time() - level['Spawn Time'] >= game['Current Level'].spawn_delay / level['Speed']:
+                    if level['Paused'] is False:
+                        game['Current Level'].spawn_enemy()
+                        game['Current Level'].enemies_left_num.update_var(game['Current Level'].enemies_left())
+                        level['Spawn Time'] = time()           
                             
         # Enemy attacks hitting the base or shield        
         if pygame.sprite.groupcollide(enemy_bullet_group, base_group, False, False):
             player_base.collided_enemy_bullets = pygame.sprite.groupcollide(enemy_bullet_group, base_group, False, False, pygame.sprite.collide_mask)
             if player_base.collided_enemy_bullets:
-                    for c in player_base.collided_enemy_bullets:
-                        for d in player_base.collided_enemy_bullets[c]:
-                            if c.__class__ == Bullet:
-                                if c.poisonous is True:
-                                    # Base or shield gets poisoned
-                                    d.poisoned = True
-                                    d.poisoned_amount += c.poison_amount
-                                    game['Current Level'].player_base_damage_taken += c.poison_amount
+                    for enemy_bullet in player_base.collided_enemy_bullets:
+                        for d in player_base.collided_enemy_bullets[enemy_bullet]:
+                            if type(enemy_bullet) == Bullet:
+                                if player_base.special_defense_in_use == 'Deflection':
+                                    if type(d) == Base and base_shield not in base_group:
+                                        player_base.deflect_lasers(enemy_bullet)
+                                    else:
+                                        d.take_damage(enemy_bullet.damage)
+                                        enemy_bullet.kill()
                                 else:
-                                    d.take_damage(c.damage)
-                                    game['Current Level'].player_base_damage_taken += c.damage
-                                c.kill()
-                                if d.__class__ == Base:
-                                    animations_group.add(Animation(impact_animation, 1, c.pos, base_hit_sound))
-                            elif c.__class__ == ChargeBolt:
-                                if d.__class__ == Shield:
+                                    # Enemy bullet hits base without the Shield                        
+                                    if type(d) == Base and base_shield not in base_group:
+                                        if enemy_bullet.poisonous is True:
+                                            # Base or shield gets poisoned
+                                            d.take_damage(enemy_bullet.damage)
+                                            d.poisoned_amount += enemy_bullet.poison_amount
+                                            game['Current Level'].player_base_damage_taken += enemy_bullet.poison_amount
+                                            animations_group.add(Animation(impact_animation, 1, enemy_bullet.pos, base_hit_sound))
+                                        else:
+                                            d.take_damage(enemy_bullet.damage)
+                                            game['Current Level'].player_base_damage_taken += enemy_bullet.damage
+                                            animations_group.add(Animation(impact_animation, 1, enemy_bullet.pos, base_hit_sound))
+                                    # Enemy bullet hits the base or shield with the Shield active
+                                    # only the Shield will take damage
+                                    else:
+                                        d.take_damage(enemy_bullet.damage)
+                                        game['Current Level'].player_base_damage_taken += enemy_bullet.damage
+                                    enemy_bullet.kill()
+                                        
+                            elif type(enemy_bullet)  == ChargeBolt:
+                                if type(d) == Shield:
                                     # Electric Shield takes 1 percent damage of the charge bolt
-                                    d.take_damage(c.damage / 100)
-                                    game['Current Level'].player_base_damage_taken += c.damage / 100
-                                else:
+                                    d.take_damage(enemy_bullet.damage / 100)
+                                    game['Current Level'].player_base_damage_taken += enemy_bullet.damage / 100
+                                elif type(d) == Base and base_shield not in base_group:
                                     # Base and turrets get electrocuted
                                     if d.absorb_electric_shock is True:
-                                        c.kill()
+                                        enemy_bullet.kill()
                                     else:
-                                        d.electrocution_damage = c.damage
+                                        d.electrocution_damage = enemy_bullet.damage
                                         d.electrified = True
                                         d.electrified_start_time = time()
-                                    game['Current Level'].player_base_damage_taken += c.damage
+                                    game['Current Level'].player_base_damage_taken += enemy_bullet.damage
                                     # Every existing helper turret is rendered useless while being electrocuted
                                     # Main turret is not affected
                                     for h in helper_turret_group:
                                         h.paralyzed = True
-                                        h.paralyzed_start_time = time()                        
-             
-        # Black hole sucking in enemy ships that collide with the black hole rect
-        if len(player_defenses_group) > 0:
-            defense_collisions = pygame.sprite.groupcollide(player_defenses_group, enemy_group, False, False)
-            if defense_collisions:
-                for defense in defense_collisions:
-                    for enemy in defense_collisions[defense]:
-                        enemy.black_hole_death = True
-                        enemy.black_hole = defense
-                if pygame.sprite.groupcollide(player_defenses_group, enemy_group, False, False, pygame.sprite.collide_circle_ratio(0.75)):
-                    for enemy in defense_collisions[defense]:
-                        enemy.take_damage(enemy.max_health * 0.01)
-                        enemy.image = pygame.transform.scale_by(enemy.image, 0.9)
-             
+                                        h.paralyzed_start_time = time()
+                                 
+                            elif type(enemy_bullet) == Laser:
+                                enemy_bullet.check_collision_with_base(base_group)                          
+        
         # Player bullet hitting enemy ships
         if pygame.sprite.groupcollide(player_bullet_group, enemy_group, False, False):  
             enemy_collisions = pygame.sprite.groupcollide(player_bullet_group, enemy_group, False, False, pygame.sprite.collide_mask)     
@@ -4678,101 +5242,133 @@ def main_play():
                     
                     for ship in enemy_collisions[bullet]:
                         if ship.has_shield() and ship.shield.active is True:
-                            if bullet.mask.overlap(ship.shield.mask, (ship.shield.rect.x - bullet.rect.x, ship.shield.rect.y - bullet.rect.y)):
-                                ship.shield.take_damage(bullet.damage)
+                            #if bullet.mask.overlap(ship.shield.mask, (ship.shield.rect.x - bullet.rect.x, ship.shield.rect.y - bullet.rect.y)):
+                            ship.shield.take_damage(bullet.damage)
                         elif ship.has_shield() and ship.shield.active is False or \
                         ship.has_shield() is False:
                             ship.take_damage(bullet.damage)
                         bullet.kill()
-                        if bullet.player_shot is True:
+                        if type(bullet) == Bullet and bullet.player_shot is True:
                             game['Current Level'].total_shots_hit += 1                  
-                                          
+                                                                                                         
         # Player bullet colliding with a flare
-        if len(flares_group) > 0:
-            if pygame.sprite.groupcollide(player_bullet_group, flares_group, False, False):
-                if pygame.sprite.groupcollide(player_bullet_group, flares_group, True, True, pygame.sprite.collide_mask):
-                    game['Current Level'].total_shots_hit += 1
+        if pygame.sprite.groupcollide(player_bullet_group, enemy_flares_group, False, False):
+            if pygame.sprite.groupcollide(player_bullet_group, enemy_flares_group, True, True, pygame.sprite.collide_mask):
+                game['Current Level'].total_shots_hit += 1
                                      
         screen.blit(bg, (0, 0))
-        
-        enemy_missile_group.update()
-        enemy_missile_group.draw(screen)
-                
-        laser_beam_group.update(base_group)
-        laser_beam_group.draw(screen)
-              
-        base_group.update(base_and_shield_stats_container)
+
+        if level['Paused'] is False:
+            base_group.update(base_and_shield_stats_container)
+            player_bullet_group.update()
+            meteor_group.update()
+            enemy_flares_group.update()
+            spawn_orb_group.update(spawn_orb_group)
+            enemy_bullet_group.update()
+            player_defenses_group.update()
+            healing_ring_group.update()
+            health_flares_group.update()
+            enemy_group.update(game['Delta Time'])
+            enemy_shields_group.update()
+            animations_group.update(player_base)
+                                                                        
         base_group.draw(screen)       
-        
-        player_bullet_group.update()
         player_bullet_group.draw(screen)
+               
+        base_turret.follow_mouse_pos()
         
-        meteor_group.update()
-        meteor_group.draw(screen)
-        
-        bomb_group.update()
-        bomb_group.draw(screen)
-        
-        raining_comets_group.update()
-        raining_comets_group.draw(screen)
         
         for helper in helper_turret_group:
-            helper.update(enemy_group)
+            if level['Paused'] is False:
+                helper.update(enemy_group)
             helper.draw()
             if helper.attack is True and level['Game Over'] is False:
                 if helper.target_in_range():
                     helper.help_shoot(player_bullet_group)    
                 
-        flares_group.update()
-        flares_group.draw(screen)
-        
-        spawn_orb_group.update(spawn_orb_group)
-        spawn_orb_group.draw(screen)          
-                
-        enemy_bullet_group.update()
+        enemy_flares_group.draw(screen)
+        spawn_orb_group.draw(screen)
         enemy_bullet_group.draw(screen)
-                           
-        base_turret.follow_mouse_pos()
-        
-        player_defenses_group.update()
         player_defenses_group.draw(screen)
-                
-        healing_ring_group.update()
         healing_ring_group.draw(screen)
-        
-        health_flares_group.update()
         health_flares_group.draw(screen)
-            
-        enemy_group.update(game['Delta Time'])
-        enemy_group.draw(screen)    
-        
-        animations_group.update(player_base)
+        enemy_group.draw(screen)
+        enemy_shields_group.draw(screen) 
         animations_group.draw(screen)       
-        
+    
+       # if int(game['Current Level'].enemies_left_num.text) > 0:
+        if game['Current Level'].current_spawn_index < len(game['Current Level'].active_enemies):
+           # return True
+            game['Current Level'].enemies_left_label.show_to_player()
+            game['Current Level'].enemies_left_num.show_to_player()
+                
         # Level Completed Feedback Message
         if player_base.stats['Health'] > 0:
             if game['Current Level'].done_spawning() and len(enemy_group) == 0:
                 if game['Current Level'].played_winning_sound is False:
-                    pygame.mixer.music.pause()
+                    pygame.mixer.stop()
+                    pygame.mixer.music.stop()
                     level_completed_sound.play()
                     game['Current Level'].played_winning_sound = True
                 enemy_bullet_group.empty()
                 player_bullet_group.empty()
+                player_base.poisoned_amount = 0
+                player_base.electrified = False
+                
                 if game['Current Level'].completed is False:
-                    #if player took no damage, give bonus loot
-                    if game['Current Level'].player_base_damage_taken <  1:
-                        level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot(), game['Current Level'].bonus_loot())
-                        player_stats['Space Crystals'] += game['Current Level'].loot_drop()
-                        player_stats['Power Gems'] += game['Current Level'].power_gem_loot()
-                        player_stats['Space Crystals'] += game['Current Level'].bonus_loot()
-                    elif game['Current Level'].player_base_damage_taken > 0:
+                    # add in power stone chances at levels red-20, orange-30, yellow-40, green-60, blue-70 
+                    level_completed_menu.header.update_var(f'Level {game["Current Level"].num} Complete')
+                    if game['Current Level'].num == 20:
+                        stone_loot = game['Current Level'].power_stone_loot(player_collected_power_stones, red_strength_power_stone)
+                        if stone_loot != None:
+                            game['Current Level'].explode_reveal_power_stone(red_strength_power_stone)
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot(), stone_loot)
+                        else:
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot())
+                            
+                    elif game['Current Level'].num == 30:
+                        stone_loot = game['Current Level'].power_stone_loot(player_collected_power_stones, orange_recovery_power_stone)
+                        if stone_loot != None:
+                            game['Current Level'].explode_reveal_power_stone(orange_recovery_power_stone)
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot(), stone_loot)
+                        else:
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot())
+                            
+                    elif game['Current Level'].num == 40:
+                        stone_loot = game['Current Level'].power_stone_loot(player_collected_power_stones, yellow_speed_power_stone)
+                        if stone_loot != None:
+                            game['Current Level'].explode_reveal_power_stone(yellow_speed_power_stone)
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot(), stone_loot)
+                        else:
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot())
+                            
+                    elif game['Current Level'].num == 60:
+                        stone_loot = game['Current Level'].power_stone_loot(player_collected_power_stones, green_depletion_power_stone)
+                        if stone_loot != None:
+                            game['Current Level'].explode_reveal_power_stone(green_depletion_power_stone)
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot(), stone_loot)
+                        else:
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot())
+                            
+                    elif game['Current Level'].num == 70:
+                        stone_loot = game['Current Level'].power_stone_loot(player_collected_power_stones, blue_freeze_power_stone)
+                        if stone_loot != None:
+                            game['Current Level'].explode_reveal_power_stone(blue_freeze_power_stone)
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot(), stone_loot)
+                        else:
+                            level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot())
+                            
+                    else:
                         level_completed_menu.generate_winnings(game['Current Level'].loot_drop(), game['Current Level'].power_gem_loot())
-                        player_stats['Space Crystals'] += game['Current Level'].loot_drop()
-                        player_stats['Power Gems'] += game['Current Level'].power_gem_loot()
-                    player_money.update_var(f'{int(player_stats["Space Crystals"])}')
-                    player_power_crystals_enlarged.update_var(f'{int(player_stats["Power Gems"])}')
+                        
+                    player_stats['Space Crystals'] += game['Current Level'].loot_drop()
+                    player_stats['Power Gems'] += game['Current Level'].power_gem_loot()
                     player_money_enlarged.update_var(f'{int(player_stats["Space Crystals"])}')
+                    player_money_shrunken.update_var(f'{int(player_stats["Space Crystals"])}')
+                    player_power_crystals_enlarged.update_var(f'{int(player_stats["Power Gems"])}')
+                    player_power_crystals_shrunken.update_var(f'{int(player_stats["Power Gems"])}')
                     if game['Current Level'].num < len(levels):
+                        # Unlocking the next level
                         levels[game['Current Level'].num].locked = False
                         levels_locked_status[status_keys[game['Current Level'].num]] = False
                 game['Current Level'].completed = True
@@ -4781,13 +5377,18 @@ def main_play():
         # Player was defeated in the current playing level
         if player_base.stats['Health'] <= 0:
             if game['Current Level'].played_defeated_sound is False:
-                pygame.mixer.music.pause()
+                pygame.mixer.stop()
+                pygame.mixer.music.stop()
                 level_defeated_sound.play()
+                if player_stats['Lives'] > 0:
+                    player_stats['Lives'] -= 1
+                level_defeated_menu.generate_lost_info(player_stats['Lives'])
                 game['Current Level'].played_defeated_sound = True
             enemy_bullet_group.empty()
             player_bullet_group.empty()
             level['Game Over'] = True
             game['Game Over Time'] = time()
+            #add in lost info generation --> run one time
         else:
             level['Game Over'] = False
             
@@ -4795,19 +5396,19 @@ def main_play():
         #level_feedback.snap_to_topright()
 #        level_feedback.show_to_player()
         
+        game_speed_button.show()
         pause_level_button.show()
         
         # Notifying player of the incoming boss if current level has a boss
         if game['Current Level'].is_boss_level():
             if game['Current Level'].done_spawning() and len(enemy_group) > 0:
                 if game['Current Level'].notified_player_about_boss is False:
-                    pygame.mixer.music.stop()
+                    pygame.mixer.stop()                 
                     incoming_boss_sound.play()
                     game['Current Level'].notified_player_about_boss = True
                     game['Screen Transition'] = True
                     game['Current Track'] = boss_battle_music                  
-                if game['Current Level'].boss is not None:
-                    game['Current Level'].show_boss_name_and_health()
+                game['Current Level'].show_boss_name_and_health()
         
         # Only showing Special attacks if the player has some to use
         if special_attacks_stats_table.dict['Rapid Fire'] > 0 or \
@@ -4817,79 +5418,107 @@ def main_play():
         special_attacks_stats_table.dict['Raining Comets'] > 0:
             special_attacks_container_label.show()
             special_attacks_container.show()
+            special_attacks_container.show_timer(player_base.special_attack_in_use, player_base.special_attack_start_time, special_attacks_durations[player_base.special_attack_in_use], base_turret.stats['Special Cooldown'])
         
         # Only showing the special defenses if the player has some to use
         if special_defenses_stats_table.dict['Shock Absorbers'] > 0 or \
-        special_defenses_stats_table.dict['Poison Antidote'] > 0:
+        special_defenses_stats_table.dict['Poison Antidote'] > 0 or \
+        special_defenses_stats_table.dict['Flares'] > 0 or \
+        special_defenses_stats_table.dict['Deflection'] > 0 or \
+        special_defenses_stats_table.dict['Magnetic Mine'] > 0:
             special_defenses_container_label.show()
-            special_defenses_container.show()          
+            special_defenses_container.show()
+            special_defenses_container.show_timer(player_base.special_defense_in_use, player_base.special_defense_start_time, special_defenses_durations[player_base.special_defense_in_use], base_turret.stats['Special Cooldown'])       
         
         # Special Attacks Buttons showing if the player has them to use
         if special_attacks_stats_table.dict['Rapid Fire'] > 0:
             rapid_fire_button.show()
-        if special_attacks_stats_table.dict['Meteor Shower'] > 0:
-            meteor_shower_button.show()
+            if player_base.special_attack_in_use == 'Rapid Fire':
+                rapid_fire_button.show_selected_dot()
+            if special_attacks_stats_table.dict['Rapid Fire'] > 1:
+                rapid_fire_button.remaining_uses.show_to_player()
+                
         if special_attacks_stats_table.dict['Cluster Shots'] > 0:
             cluster_shot_button.show()
-        if special_attacks_stats_table.dict['Vaporizers'] > 0:
-            vaporize_button.show()
+            if player_base.special_attack_in_use == 'Cluster Shots':
+                cluster_shot_button.show_selected_dot()
+            if special_attacks_stats_table.dict['Cluster Shots'] > 1:
+                cluster_shot_button.remaining_uses.show_to_player()
+                
+        if special_attacks_stats_table.dict['Meteor Shower'] > 0:
+            meteor_shower_button.show()
+            if player_base.special_attack_in_use == 'Meteor Shower':
+                meteor_shower_button.show_selected_dot()
+            if special_attacks_stats_table.dict['Meteor Shower'] > 1:
+                meteor_shower_button.remaining_uses.show_to_player()
+                
         if special_attacks_stats_table.dict['Raining Comets'] > 0:
             raining_comets_button.show()
+            if player_base.special_attack_in_use == 'Raining Comets':
+                raining_comets_button.show_selected_dot()
+            if special_attacks_stats_table.dict['Raining Comets'] > 1:
+                raining_comets_button.remaining_uses.show_to_player()
+                
+        if special_attacks_stats_table.dict['Vaporizers'] > 0:
+            vaporize_button.show()
+            if player_base.special_attack_in_use == 'Vaporizers':
+                vaporize_button.show_selected_dot()
+            if special_attacks_stats_table.dict['Vaporizers'] > 1:
+                vaporize_button.remaining_uses.show_to_player()
             
         # Special Defenses Buttons showing if the player has them to use
         if special_defenses_stats_table.dict['Shock Absorbers'] > 0:
             shock_absorber_button.show()
+            if player_base.special_defense_in_use == 'Shock Absorbers':
+                shock_absorber_button.show_selected_dot()
+            if special_defenses_stats_table.dict['Shock Absorbers'] > 1:
+                shock_absorber_button.remaining_uses.show_to_player()
+                
         if special_defenses_stats_table.dict['Poison Antidote'] > 0:
             poison_antidote_button.show()
+            if player_base.special_defense_in_use == 'Poison Antidote':
+                poison_antidote_button.show_selected_dot()
+            if special_defenses_stats_table.dict['Poison Antidote'] > 1:
+                poison_antidote_button.remaining_uses.show_to_player()
+                
+        if special_defenses_stats_table.dict['Flares'] > 0:
+            flares_defense_button.show()
+            if player_base.special_defense_in_use == 'Flares':
+                flares_defense_button.show_selected_dot()
+            if special_defenses_stats_table.dict['Flares'] > 1:
+                flares_defense_button.remaining_uses.show_to_player()
+                
+        if special_defenses_stats_table.dict['Deflection'] > 0:
+            deflection_defense_button.show()
+            if player_base.special_defense_in_use == 'Deflection':
+                deflection_defense_button.show_selected_dot()
+            if special_defenses_stats_table.dict['Deflection'] > 1:
+                deflection_defense_button.remaining_uses.show_to_player()
+                
+        if special_defenses_stats_table.dict['Magnetic Mine'] > 0:
+            magnetic_mine_button.show()
+            if player_base.special_defense_in_use == 'Magnetic Mine':
+                magnetic_mine_button.show_selected_dot()
+            if special_defenses_stats_table.dict['Magnetic Mine'] > 1:
+                magnetic_mine_button.remaining_uses.show_to_player()
         
         # Winning rewards menu slides up from the bottom of the screen to the middle
         if game['Current Level'].completed is True and level['Battle'] is True:
-            level_completed_menu.slide_to_middle(9)
-            continue_level_button.slide_to((level_completed_menu.rect.centerx, level_completed_menu.rect.bottom - level_nav_button.get_height() - 5), 10)
+            level_completed_menu.show()
+            continue_level_button.show()
             
         if level['Game Over'] is True and level['Restart Game'] is False:
-            level_defeated_menu.slide_to_middle(9)
-            replay_button.slide_to((level_defeated_menu.rect.centerx + level_nav_button.get_width() / 2 + 5, level_defeated_menu.rect.bottom - level_nav_button.get_height() - 5), 10)
-            quit_button.slide_to((replay_button.rect.centerx - level_nav_button.get_width() - 10, replay_button.rect.centery), 10)
-            
-        if level['Battle'] is False or game['Current Level'].completed is False:
-            level_completed_menu.slide_to_origin(10)
-            continue_level_button.slide_to_origin(10)
-           
-        if player_base.stats['Health'] > 0 or level['Battle'] is False or \
-        level['Restart Game'] is True:
-            level_defeated_menu.slide_to_origin(10)
-            replay_button.slide_to_origin(10)
-            quit_button.slide_to_origin(10)
-           
-        if level_completed_menu.rect.top <= screen_height:
-            level_completed_menu.show()
-            continue_level_button.show()     
-            
-        if level_defeated_menu.rect.top <= screen_height:
             level_defeated_menu.show()
+            level_defeated_menu.show_lost_info()
             replay_button.show()
-            quit_button.show()       
+            quit_button.show()
+            
+        if level['Paused'] is False:    
+            power_stones_group.update()
+        power_stones_group.draw(screen)  
             
         # Showing the pause level menu
-    if level['Paused'] is True:
-            
-            for event in pygame.event.get():
-                if unpause_game_button.clicked(event):
-                    level['Paused'] = False
-                    
-                if abandon_game_button.clicked(event):
-                    level['Abandoned'] = True
-                    level['Button Clicked']
-                    if game['Sounds'] is True:
-                        button_clicked_sound.play()
-                    level['Fade'] = True
-                    level['Overworld'] = True
-                    level['Battle'] = False
-                    #level['Paused'] = False
-                    game['Screen Transition'] = True
-                    game['Current Track'] = starting_music
-            
+        if level['Paused'] is True:
             if level['Abandoned'] is False:            
                 paused_level_menu.show()
                 unpause_game_button.show()
@@ -4931,25 +5560,26 @@ def main():
             elif level['Game Select'] is True:
                 level['Screen'] = load_game_selection_menu
             elif level['Overworld'] is True:
+                game['Preview Saved Game'] = False
                 if level['Abandoned'] is True:
                     player_base.stats['Health'] = game['Current Level'].player_base_starting_health
                     base_shield.stats['Health'] = game['Current Level'].base_shield_starting_health
                     level['Abandoned'] = False
-                level['Screen'] = level_overworld          
+                level['Screen'] = level_overworld
             elif level['Battle'] is True:
-                base_health_upgrades_button.reset_position()
-                shield_upgrades_button.reset_position()
-                base_turret_upgrades_button.reset_position()
-                extra_turret_upgrades_button.reset_position()
-                special_attacks_button.reset_position()
-                special_defenses_button.reset_position()
+                player_base.special_attack_start_time = time()
+                player_base.special_defense_start_time = time()
+                player_base.special_attack_in_use = 'None'
+                player_base.special_defense_in_use = 'None'
                 enemy_bullet_group.empty()
                 player_bullet_group.empty()
-                flares_group.empty()
-                enemy_group.empty()   
-                level['Paused'] = False             
+                enemy_flares_group.empty()
+                health_flares_group.empty()
+                enemy_group.empty()
+                game['Preview Level'] = False
+                level['Paused'] = False       
                 level['On Menu'] = False
-                level['Screen'] = main_play  
+                level['Screen'] = main_play
                 game['Current Level'].load(player_base)
                      
             elif level['Upgrading'] is True:
@@ -4963,7 +5593,7 @@ def main():
                 game['Current Level'].load(player_base)
                 enemy_bullet_group.empty()
                 player_bullet_group.empty()
-                flares_group.empty()
+                enemy_flares_group.empty()
                 enemy_group.empty()
                 player_base.stats['Health'] = player_base.stats['Max Health']
                 level['Restart Game'] = False
@@ -4979,18 +5609,16 @@ def main():
             
         #if level['Battle'] is True:# and CLOCK.get_fps() > 50:
 #            print('{:.2f}'.format(CLOCK.get_fps()))
-            #show_variable(f'FPS = {int(CLOCK.get_fps())}', reg_font, (1380, 700))
-        #show_variable(f'{screen_width}', reg_font, (100, 700))
-        #screen.blit(vaporizing_arc_image, (screen_width * 0.25, 0))
-        #screen.blit(test_back_button, (300, 300))
-        #player_defenses_group.update()
-        #player_defenses_group.draw(screen)    
+            #show_variable('{:.2f}'.format(CLOCK.get_fps()), debug_font, (200, 660))
+        #show_variable(f'Attack active = {player_base.special_attack_used}', debug_font, (200, 600))
+        #show_variable(f'Attack in use = {player_base.special_attack_in_use}', debug_font, (200, 630))
+        #show_variable(f'{len(enemy_flares_group)}', debug_font, (200, 630))
         
         CLOCK.tick()
         pygame.display.update()
         
 if __name__ == "__main__":
-    profile.run('main()')
-    #main()
+    #profile.run('main()')
+    main()
     
 pygame.quit()
